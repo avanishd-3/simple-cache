@@ -12,7 +12,7 @@ def main():
 
     # Loop until client closes connection
     while True:
-        data = connection.recv(1024)
+        data: bytes = connection.recv(1024)
         if not data:
             break
         connection.sendall(b"+PONG\r\n")
