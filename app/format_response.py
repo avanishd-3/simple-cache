@@ -10,6 +10,12 @@ def format_bulk_success(message: str) -> bytes:
     """
     return f"${len(message)}\r\n{message}\r\n".encode("utf-8")
 
+def format_integer_success(value: int) -> bytes:
+    """
+    Return a RESP integer
+    """
+    return f":{value}\r\n".encode("utf-8")
+
 def format_bulk_error() -> bytes:
     """
     Format a Redis error response.

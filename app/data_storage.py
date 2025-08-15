@@ -41,3 +41,17 @@ class DataStorage():
             else:
                 logging.info(f"Key not found: {key}")
                 return None
+            
+    async def rpush(self, key: str, value: str) -> int:
+        async with self.lock:
+            if key not in self.storage_dict:
+                self.storage_dict[key] = ValueWithExpiry([], None)
+                logging.info(f"Created new list for key: {key}")
+
+
+            accessed_list = self.storage_dict[key].value
+            accessed_list.append(value)
+            logging.info(f"Appended {value} to list {key}")
+
+        # Return number of elements in list
+        return len(accessed_list)
