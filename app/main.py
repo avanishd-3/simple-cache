@@ -1,14 +1,19 @@
 import asyncio
 import logging
+import time
 
 # Internal imports
-from .format_response import format_success_response, format_error_response, format_bulk_response
+from .format_response import format_simple_success, format_bulk_error, format_bulk_success
 from .data_storage import DataStorage
+
+logging.basicConfig(level=logging.INFO)
 
 # Data
 storage_data: DataStorage = DataStorage()
 
 async def redis_parser(data: bytes) -> list[str]:
+    # TODO: Make actual parser
+
     command_list = data.decode().strip().split("\r\n")
 
     # Remove commands with * and $
@@ -42,7 +47,7 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
 
             match curr_command.upper():
                 case "PING":
-                    writer.write(format_success_response("PONG"))
+                    writer.write(format_simple_success("PONG"))
                     await writer.drain()  # Flush write buffer
 
                     logging.info("Sent PONG response")
@@ -50,7 +55,7 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                     i += 1  # Move to next command
                 case "ECHO":
                     msg: str = command_list[i + 1] if i + 1 < command_list_len else ""
-                    writer.write(format_success_response(msg))
+                    writer.write(format_simple_success(msg))
                     await writer.drain()  # Flush write buffer
 
                     logging.info(f"Sent ECHO response: {msg}")
@@ -61,14 +66,26 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                     key: str = command_list[i + 1] if i + 1 < command_list_len else ""
                     value: str = command_list[i + 2] if i + 2 < command_list_len else ""
 
-                    await storage_data.set(key, value)
+                    # Expiry
+                    if i + 4 < command_list_len and command_list[i + 3].upper() == "PX":
+                        expiry_amount: int = int(command_list[i + 4])
 
-                    writer.write(format_success_response("OK"))
+                        expiry_time: float = time.time() + (expiry_amount / 1000)  # Convert milliseconds to seconds
+
+                        await storage_data.set(key, value, expiry_time)
+
+                        logging.info(f"Set key with expiry: {key} = {value}, expiry = {expiry_time}")
+
+                        i += 5
+
+                    else:
+                        await storage_data.set(key, value)
+                        i += 3
+
+                        logging.info(f"Set key without expiry: {key} = {value}")
+
+                    writer.write(format_simple_success("OK"))
                     await writer.drain()  # Flush write buffer
-
-                    logging.info(f"Sent SET response: {key} = {value}")
-
-                    i += 3  # Move to next command
 
                 case "GET":
                     key: str = command_list[i + 1] if i + 1 < command_list_len else ""
@@ -76,19 +93,23 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                     value: str | None = await storage_data.get(key)
 
                     if value is not None:
-                        writer.write(format_bulk_response(value))
+                        writer.write(format_bulk_success(value))
+                        logging.info(f"Sent GET response: {key} = {value}")
                     else:
-                        writer.write(format_error_response("-1")) # Null bulk string (shows key doesn't exist)
+                        # Should return null bulk string -> $-1\r\n
+                        writer.write(format_bulk_error()) # Null bulk string (shows key doesn't exist)
+                        logging.info(f"Key {key} not found")
 
                     await writer.drain()  # Flush write buffer
 
-                    logging.info(f"Sent GET response: {key} = {value}")
+                    
 
                     i += 2  # Move to next command
 
                 case _:
                     # Keep this for now, change/remove when done
                     writer.write(b"-Error: Unknown command\r\n")
+                    logging.info(f"Sent error response for unknown command: {curr_command}")
                     await writer.drain()  # Flush write buffer
 
                     i += 1  # Move to next command
