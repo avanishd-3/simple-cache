@@ -3,9 +3,10 @@ import logging
 
 # Internal imports
 from .format_response import format_success_response, format_error_response, format_bulk_response
+from .data_storage import DataStorage
 
 # Data
-storage_dict: dict = {}
+storage_data: DataStorage = DataStorage()
 
 async def redis_parser(data: bytes) -> list[str]:
     command_list = data.decode().strip().split("\r\n")
@@ -59,7 +60,8 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                 case "SET":
                     key: str = command_list[i + 1] if i + 1 < command_list_len else ""
                     value: str = command_list[i + 2] if i + 2 < command_list_len else ""
-                    storage_dict[key] = value
+
+                    await storage_data.set(key, value)
 
                     writer.write(format_success_response("OK"))
                     await writer.drain()  # Flush write buffer
@@ -70,7 +72,8 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
 
                 case "GET":
                     key: str = command_list[i + 1] if i + 1 < command_list_len else ""
-                    value: str = storage_dict.get(key, None)
+
+                    value: str | None = await storage_data.get(key)
 
                     if value is not None:
                         writer.write(format_bulk_response(value))
