@@ -1,6 +1,12 @@
 import asyncio
 import logging
 
+# Internal imports
+from .format_response import format_success_response, format_error_response, format_bulk_response
+
+# Data
+storage_dict: dict = {}
+
 async def redis_parser(data: bytes) -> list[str]:
     command_list = data.decode().strip().split("\r\n")
 
@@ -35,17 +41,50 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
 
             match curr_command.upper():
                 case "PING":
-                    writer.write(b"+PONG\r\n")
+                    writer.write(format_success_response("PONG"))
                     await writer.drain()  # Flush write buffer
+
+                    logging.info("Sent PONG response")
 
                     i += 1  # Move to next command
                 case "ECHO":
                     msg: str = command_list[i + 1] if i + 1 < command_list_len else ""
-                    writer.write(f"+{msg}\r\n".encode())
+                    writer.write(format_success_response(msg))
                     await writer.drain()  # Flush write buffer
 
-                    i += 2 # Move to next command
+                    logging.info(f"Sent ECHO response: {msg}")
+
+                    i += 2  # Move to next command
+
+                case "SET":
+                    key: str = command_list[i + 1] if i + 1 < command_list_len else ""
+                    value: str = command_list[i + 2] if i + 2 < command_list_len else ""
+                    storage_dict[key] = value
+
+                    writer.write(format_success_response("OK"))
+                    await writer.drain()  # Flush write buffer
+
+                    logging.info(f"Sent SET response: {key} = {value}")
+
+                    i += 3  # Move to next command
+
+                case "GET":
+                    key: str = command_list[i + 1] if i + 1 < command_list_len else ""
+                    value: str = storage_dict.get(key, None)
+
+                    if value is not None:
+                        writer.write(format_bulk_response(value))
+                    else:
+                        writer.write(format_error_response("-1")) # Null bulk string (shows key doesn't exist)
+
+                    await writer.drain()  # Flush write buffer
+
+                    logging.info(f"Sent GET response: {key} = {value}")
+
+                    i += 2  # Move to next command
+
                 case _:
+                    # Keep this for now, change/remove when done
                     writer.write(b"-Error: Unknown command\r\n")
                     await writer.drain()  # Flush write buffer
 
