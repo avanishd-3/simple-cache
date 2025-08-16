@@ -43,6 +43,11 @@ class DataStorage():
                 return None
             
     async def rpush(self, key: str, items: list) -> int:
+        """
+        Add items to the end of a list stored at the specified key.
+
+        Create the list with these items if it doesn't exist.
+        """
         async with self.lock:
             if key not in self.storage_dict:
                 self.storage_dict[key] = ValueWithExpiry([], None)
