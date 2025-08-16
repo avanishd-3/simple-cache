@@ -8,7 +8,7 @@ from .format_response import (
     format_bulk_success,
     format_integer_success,
     format_resp_array,
-    format_bulk_error,
+    format_null_bulk_string,
 )
 
 from .data_storage import DataStorage
@@ -103,7 +103,7 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                         logging.info(f"Sent GET response: {key} = {value}")
                     else:
                         # Should return null bulk string -> $-1\r\n
-                        writer.write(format_bulk_error()) # Null bulk string (shows key doesn't exist)
+                        writer.write(format_null_bulk_string()) # Null bulk string (shows key doesn't exist)
                         logging.info(f"Key {key} not found")
 
                     await writer.drain()  # Flush write buffer

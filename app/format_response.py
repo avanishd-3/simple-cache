@@ -27,7 +27,7 @@ def format_resp_array(elements: list[str]) -> bytes:
         array = "".join(f"${len(el)}\r\n{el}\r\n" for el in elements)
         return f"*{len(elements)}\r\n{array}".encode("utf-8")
 
-def format_bulk_error() -> bytes:
+def format_null_bulk_string() -> bytes:
     """
     Format a Redis error response.
     """
