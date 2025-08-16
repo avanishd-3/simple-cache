@@ -60,3 +60,38 @@ class DataStorage():
 
         # Return number of elements in list
         return len(accessed_list)
+    
+    async def lrange(self, key: str, start: int, end: int) -> list:
+        """
+        Retrieve a range of elements from a list stored at the specified key.
+
+        Return an empty list if:
+          - List does not exist
+          - Start index is >= list length
+          - Start index > stop index
+        
+        If stop index is >= list length, stop index is last element
+        """
+
+        if (start > end):
+            logging.info(f"Start index {start} > end index {end} in search for {key}")
+            return []
+
+
+        async with self.lock:
+            item = self.storage_dict.get(key, None)
+            if item is not None and isinstance(item.value, list):
+                list_len: int = len(item.value)
+                if start >= list_len:
+                    logging.info(f"Start index {start} >= list length {list_len} in search for {key}")
+                    return []
+                if end >= list_len:
+                    logging.info(f"End index {end} >= list length {list_len} in search for {key}, treating last item as end")
+                    end = list_len - 1 # Otherwise will overflow on last element
+                
+                items_to_return = item.value[start:end+1]  # Redis treats end as inclusive
+                logging.info(f"Retrieved elements from {key} from index {start} to {end}: {items_to_return}")
+                return items_to_return
+            else:
+                logging.info(f"Key not found or not a list: {key}")
+                return []

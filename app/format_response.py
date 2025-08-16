@@ -16,6 +16,17 @@ def format_integer_success(value: int) -> bytes:
     """
     return f":{value}\r\n".encode("utf-8")
 
+def format_resp_array(elements: list[str]) -> bytes:
+    """
+    Return a RESP array
+    """
+    if len(elements) == 0:
+        # Empty RESP array
+        return "*0\r\n".encode("utf-8")
+    else:
+        array = "".join(f"${len(el)}\r\n{el}\r\n" for el in elements)
+        return f"*{len(elements)}\r\n{array}".encode("utf-8")
+
 def format_bulk_error() -> bytes:
     """
     Format a Redis error response.

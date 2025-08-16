@@ -7,6 +7,7 @@ from .format_response import (
     format_simple_success,
     format_bulk_success,
     format_integer_success,
+    format_resp_array,
     format_bulk_error,
 )
 
@@ -130,6 +131,21 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                     await writer.drain()  # Flush write buffer
 
                     i += increment_num  # Move to next command
+
+                # Retrieve a range of elements from a list
+                # TODO: Add support for negative indices
+                case "LRANGE":
+                    key: str = command_list[i + 1] if i + 1 < command_list_len else ""
+                    start: int = int(command_list[i + 2]) if i + 2 < command_list_len else 0
+                    end: int = int(command_list[i + 3]) if i + 3 < command_list_len else -1
+
+                    logging.info(f"LRANGE: key {key}, start {start}, end {end}")
+
+                    elements = await storage_data.lrange(key, start, end)
+                    writer.write(format_resp_array(elements))
+                    await writer.drain()  # Flush write buffer
+
+                    i += 4
 
                 case _:
                     # Keep this for now, change/remove when done
