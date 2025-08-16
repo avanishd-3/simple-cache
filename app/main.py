@@ -49,7 +49,6 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
             curr_command = command_list[i]
 
             logging.info(f"Received command: {curr_command}")
-            print(f"Received command: {curr_command}")
 
             match curr_command.upper():
                 case "PING":
