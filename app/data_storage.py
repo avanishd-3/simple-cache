@@ -64,6 +64,37 @@ class DataStorage():
         # Return number of elements in list
         return len(accessed_list)
     
+    async def lpush(self, key: str, items: list) -> int:
+        """
+        Add items to the beginning of a list stored at the specified key in reverse order.
+
+        Create the list with these items if it doesn't exist.
+
+        Return length of the list
+        """
+        async with self.lock:
+            if key not in self.storage_dict:
+                self.storage_dict[key] = ValueWithExpiry([], None)
+                logging.info(f"Created new list for key: {key}")
+
+            accessed_list: list = self.storage_dict[key].value
+
+            # Insert items at the start of the list
+            # This is better than += b/c it avoids creating a new list
+            # A new list would mean needing to update the storage dict, which harms cache performance for no reason
+
+            item_len: int = len(items)
+            for i in range(item_len):
+                # Insert in reverse order
+                # Subtract by 1 accounts for zero-indexing
+                # Doing this is faster than reversing the list
+                accessed_list.insert(i, items[item_len - i - 1])
+            
+            logging.info(f"Prepended {items} to list {key}")
+
+        # Return number of elements in list
+        return len(accessed_list)
+    
     async def lrange(self, key: str, start: int, end: int) -> list:
         """
         Retrieve a range of elements from a list stored at the specified key.
@@ -92,6 +123,8 @@ class DataStorage():
             item = self.storage_dict.get(key, None)
             if item is not None and isinstance(item.value, list):
                 list_len: int = len(item.value)
+
+                logging.info(f"List is: {item.value}")
 
                 if start >= list_len:
                     logging.info(f"Start index {start} >= list length {list_len} in search for {key}")

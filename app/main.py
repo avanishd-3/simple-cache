@@ -132,6 +132,29 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
 
                     i += increment_num  # Move to next command
 
+                # Prepends elements to a list
+                # List is created first if it doesn't exist
+                case "LPUSH":
+                    key: str = command_list[i + 1] if i + 1 < command_list_len else ""
+
+                    increment_num: int = 2 # How much to move forward in commands list (based on number of elements)
+
+                    # Get all list elements to append
+                    list_elements: list = []
+                    for j in range(i + 2, command_list_len):
+                        list_elements.append(command_list[j])
+                        increment_num += 1
+
+                    logging.info(f"LPUSH: {key} = {list_elements}")
+
+                    list_len = await storage_data.lpush(key, list_elements)
+
+                    writer.write(format_integer_success(list_len))
+                    await writer.drain()  # Flush write buffer
+
+                    i += increment_num  # Move to next command
+
+
                 # Retrieve a range of elements from a list
                 case "LRANGE":
                     key: str = command_list[i + 1] if i + 1 < command_list_len else ""

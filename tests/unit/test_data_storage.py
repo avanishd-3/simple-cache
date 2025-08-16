@@ -34,9 +34,25 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
         length = await self.storage.rpush("numbers", [3])
         self.assertEqual(length, 3)
 
+    async def test_lpush_creates_list_if_it_doesnt_exist(self):
+        length = await self.storage.lpush("letters", ["a", "b"])
+        self.assertEqual(length, 2)
+
+    async def test_lpush_appends_to_existing_list(self):
+        await self.storage.lpush("numbers", [1, 2])
+        length = await self.storage.lpush("numbers", [3])
+        self.assertEqual(length, 3)
+
     async def test_rpush_and_lrange_basic(self):
         await self.storage.rpush("mylist", ["a", "b", "c"])
         result = await self.storage.lrange("mylist", 0, 2)
+        self.assertEqual(result, ["a", "b", "c"])
+
+    async def test_lpush_and_lrange_basic(self):
+        await self.storage.lpush("mylist", ["c"])
+        await self.storage.lpush("mylist", ["b", "a"])
+        
+        result = await self.storage.lrange("mylist", 0, -1)
         self.assertEqual(result, ["a", "b", "c"])
 
     async def test_lrange_with_nonexistent_key(self):
