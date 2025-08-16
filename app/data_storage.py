@@ -47,6 +47,8 @@ class DataStorage():
         Add items to the end of a list stored at the specified key.
 
         Create the list with these items if it doesn't exist.
+
+        Return length of list
         """
         async with self.lock:
             if key not in self.storage_dict:
