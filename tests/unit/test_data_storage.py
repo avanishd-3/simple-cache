@@ -25,9 +25,12 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
         value = await self.storage.get("expiring")
         self.assertIsNone(value)
 
-    async def test_rpush_returns_length(self):
+    async def test_rpush_creates_list_if_it_doesnt_exist(self):
         length = await self.storage.rpush("numbers", [1, 2])
         self.assertEqual(length, 2)
+
+    async def test_rpush_appends_to_existing_list(self):
+        await self.storage.rpush("numbers", [1, 2])
         length = await self.storage.rpush("numbers", [3])
         self.assertEqual(length, 3)
 
