@@ -114,16 +114,23 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                 # List is created first if it doesn't exist
                 case "RPUSH":
                     key: str = command_list[i + 1] if i + 1 < command_list_len else ""
-                    value: str = command_list[i + 2] if i + 2 < command_list_len else ""
 
-                    list_len = await storage_data.rpush(key, value)
+                    increment_num: int = 2 # How much to move forward in commands list (based on number of elements)
 
-                    logging.info(f"RPUSH: {key} = {value}")
+                    # Get all list elements to append
+                    list_elements: list = []
+                    for j in range(i + 2, command_list_len):
+                        list_elements.append(command_list[j])
+                        increment_num += 1
+
+                    logging.info(f"RPUSH: {key} = {list_elements}")
+
+                    list_len = await storage_data.rpush(key, list_elements)
 
                     writer.write(format_integer_success(list_len))
                     await writer.drain()  # Flush write buffer
 
-                    i += 3  # Move to next command
+                    i += increment_num  # Move to next command
 
                 case _:
                     # Keep this for now, change/remove when done
