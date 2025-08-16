@@ -26,7 +26,7 @@ async def redis_parser(data: bytes) -> list[str]:
     # Do not uppercase commands, because some of them contain strings
     command_list = [cmd for cmd in command_list if not (cmd.startswith("*") or cmd.startswith("$"))]
 
-    print(command_list)
+    logging.info(f"Parsed commands: {command_list}")
 
     return command_list
 
