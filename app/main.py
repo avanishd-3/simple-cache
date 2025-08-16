@@ -133,7 +133,6 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                     i += increment_num  # Move to next command
 
                 # Retrieve a range of elements from a list
-                # TODO: Add support for negative indices
                 case "LRANGE":
                     key: str = command_list[i + 1] if i + 1 < command_list_len else ""
                     start: int = int(command_list[i + 2]) if i + 2 < command_list_len else 0
