@@ -5,7 +5,7 @@ import time
 # Internal imports
 from .format_response import (
     format_simple_success,
-    format_bulk_success,
+    format_bulk_string_success,
     format_integer_success,
     format_resp_array,
     format_null_bulk_string,
@@ -99,7 +99,7 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                     value: str | None = await storage_data.get(key)
 
                     if value is not None:
-                        writer.write(format_bulk_success(value))
+                        writer.write(format_bulk_string_success(value))
                         logging.info(f"Sent GET response: {key} = {value}")
                     else:
                         # Should return null bulk string -> $-1\r\n
@@ -179,6 +179,33 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                     await writer.drain()  # Flush write buffer
 
                     i += 4
+
+                # Remove elements from the left
+                case "LPOP":
+                    key: str = command_list[i + 1] if i + 1 < command_list_len else ""
+
+                    number_to_pop: int = int(command_list[i + 2]) if i + 2 < command_list_len else 1
+
+                    logging.info(f"LPOP: {key}, count: {number_to_pop}")
+
+                    value: list | None = await storage_data.lpop(key, number_to_pop)
+
+                    if value is None:
+                        writer.write(format_null_bulk_string())
+                    else:
+                        if len(value) == 1:
+                            # RESP expects bulk string for only 1 value popped
+                            writer.write(format_bulk_string_success(value[0]))
+                        else:
+                            # RESP expects array if multiple values popped
+                            writer.write(format_resp_array(value))
+                    await writer.drain()  # Flush write buffer
+
+                    if i + 2 < command_list_len:
+                        # There is optional count specified
+                        i += 3
+                    else:
+                        i += 2
 
                 case _:
                     # Keep this for now, change/remove when done

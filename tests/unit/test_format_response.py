@@ -2,7 +2,7 @@ import unittest
 
 from app.format_response import (
     format_simple_success,
-    format_bulk_success,
+    format_bulk_string_success,
     format_integer_success,
     format_resp_array,
     format_null_bulk_string,
@@ -14,7 +14,7 @@ class TestFormatResponse(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response, b"+PONG\r\n")
 
     def test_format_bulk_success(self):
-        response: bytes = format_bulk_success("bar")
+        response: bytes = format_bulk_string_success("bar")
         self.assertEqual(response, b"$3\r\nbar\r\n")
 
     def test_format_integer_success(self):

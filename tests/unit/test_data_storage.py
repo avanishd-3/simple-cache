@@ -108,5 +108,26 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
         length = await self.storage.llen("nope")
         self.assertEqual(length, 0)
 
+    async def test_lpop_with_one_element_removal(self):
+        await self.storage.rpush("mylist", ["a", "b", "c", "d"])
+        result: str = await self.storage.lpop("mylist", 1)
+        self.assertEqual(result, ["a"])
+        self.assertEqual(await self.storage.llen("mylist"), 3)
+
+    async def test_lpop_with_multiple_elements_removal(self):
+        await self.storage.rpush("mylist", ["one", "two", "three", "four"])
+        result: str = await self.storage.lpop("mylist", 2)
+        self.assertEqual(result, ["one", "two"])
+        self.assertEqual(await self.storage.llen("mylist"), 2)
+
+    async def test_lpop_with_nonexistent_key(self):
+        result: str = await self.storage.lpop("nope", 1)
+        self.assertEqual(result, None)
+
+    async def test_lpop_with_empty_list(self):
+        await self.storage.rpush("mylist", [])
+        result: str = await self.storage.lpop("mylist", 1)
+        self.assertEqual(result, None)
+
 if __name__ == "__main__":
     unittest.main()

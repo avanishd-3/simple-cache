@@ -4,7 +4,7 @@ def format_simple_success(message: str) -> bytes:
     """
     return f"+{message}\r\n".encode("utf-8")
 
-def format_bulk_success(message: str) -> bytes:
+def format_bulk_string_success(message: str) -> bytes:
     """
     Format a Redis bulk success response.
     """

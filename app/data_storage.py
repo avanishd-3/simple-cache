@@ -164,4 +164,31 @@ class DataStorage():
                 return items_to_return
             else:
                 logging.info(f"Key not found or not a list: {key}")
-                return []
+                return [] # RESP specification returns empty array for this
+            
+    async def lpop(self, key: str, count: int = 1) -> list | None:
+        """
+        Remove and return the specified number of elements from the left side of the list stored at the specified key.
+
+        If the list does not exist or is empty, an empty list is returned.
+        """
+        async with self.lock:
+            item = self.storage_dict.get(key, None)
+            
+            if item is not None and isinstance(item.value, list):
+                if (len(item.value) == 0):
+                    logging.info(f"List is empty: {key}")
+                    return None  # RESP specification returns null bulk string for this
+                else:
+                    removed_items: list = item.value[:count]
+
+                    # namedtuples are immutable by default, so need to create a new one
+                    new_item = ValueWithExpiry(item.value[count:], item.expiry_time)
+                    self.storage_dict[key] = new_item # Update value in storage
+
+                    logging.info(f"Removed items from {key}: {removed_items}")
+                    return removed_items
+            
+            else:
+                logging.info(f"Key not found or not a list: {key}")
+                return None # RESP specification returns null bulk string for this
