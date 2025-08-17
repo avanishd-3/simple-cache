@@ -207,6 +207,34 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                     else:
                         i += 2
 
+                # Remove elements from the left with blocking
+                # TODO -> Add support for client that has been waiting for longer getting the response first
+                case "BLPOP":
+                    key: str = command_list[i + 1] if i + 1 < command_list_len else ""
+                    blocking_time: float = float(command_list[i + 2]) if i + 2 < command_list_len else 0
+
+                    logging.info(f"BLPOP: {key}, blocking time: {blocking_time}")
+
+                    # TODO -> Use Pydantic to validate input schema
+                    result: dict[str, list | None] = await storage_data.blpop(key, blocking_time)
+
+                    if result is None:
+                        # Unable to pop from specified list
+                        logging.info(f"BLPOP: {key} timed out after {blocking_time} seconds")
+                        writer.write(format_null_bulk_string())
+                    else:
+                        # List name and removed item are array of bulk strings
+                        writer.write(format_resp_array([result["list_name"], result["removed_item"]]))
+                        logging.info(f"BLPOP: Wrote array response for {key} -> [{result['list_name']}, {result['removed_item']}]")
+
+                    await writer.drain()  # Flush write buffer
+
+                    if i + 2 < command_list_len:
+                        # Blocking time is specified
+                        i += 3
+                    else:
+                        i += 2
+
                 case _:
                     # Keep this for now, change/remove when done
                     writer.write(b"-Error: Unknown command\r\n")

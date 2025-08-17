@@ -192,3 +192,38 @@ class DataStorage():
             else:
                 logging.info(f"Key not found or not a list: {key}")
                 return None # RESP specification returns null bulk string for this
+            
+    async def blpop(self, key: str, blocking_time: int = 0) -> tuple[str, list | None]:
+        """
+        Block for specified blocking time (in seconds) until an element is available in the list.
+
+        If blocking time is 0, block indefinitely.
+        """
+
+        curr_time: float = time.time()
+        stop_blocking_time: float = curr_time + blocking_time if blocking_time > 0 else float("inf")
+
+        while curr_time < stop_blocking_time:
+            async with self.lock:
+                # Fetch item every time so we get the latest state
+                item = self.storage_dict.get(key, None)
+                if item is not None and isinstance(item.value, list) and len(item.value) > 0:
+                    # Found an item to pop
+                    logging.info(f"No longer blocked: found item to pop from {key}")
+                    # Release lock so lpop can access the storage
+                    self.lock.release()
+                    # Get removed item
+                    removed_item: str = (await self.lpop(key, count=1))[0]  # List will be only 1 element
+                    # Acquire lock again so context manager works
+                    await self.lock.acquire()
+                    logging.info(f"Removed item from {key}: {removed_item}")
+                    return {"list_name": key, "removed_item": removed_item}
+
+            # So blocking times of 100 ms or less don't timeout immediately
+            # This doesn't work for 101 ms or 102ms but these times are uncommon
+            time_to_sleep: float = min(blocking_time / 10, 0.1) 
+            await asyncio.sleep(time_to_sleep)
+            curr_time = time.time()
+
+        logging.info(f"Blocking pop timed out for {key}")
+        return None  # RESP specification returns null bulk string for this
