@@ -95,6 +95,21 @@ class DataStorage():
         # Return number of elements in list
         return len(accessed_list)
     
+    async def llen(self, key: str) -> int:
+        """
+        Return length of key
+
+        Return 0 for non-existent key
+        """
+        async with self.lock:
+            item = self.storage_dict.get(key, None)
+            if item is not None and isinstance(item.value, list):
+                logging.info(f"Retrieved length for key '{key}': {len(item.value)}")
+                return len(item.value)
+            else:
+                logging.info(f"Key not found or not a list: {key}")
+                return 0
+
     async def lrange(self, key: str, start: int, end: int) -> list:
         """
         Retrieve a range of elements from a list stored at the specified key.

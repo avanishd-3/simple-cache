@@ -154,6 +154,17 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
 
                     i += increment_num  # Move to next command
 
+                # Get length of a list
+                case "LLEN":
+                    key: str = command_list[i + 1] if i + 1 < command_list_len else ""
+
+                    logging.info(f"LLEN: {key}")
+
+                    length: int = await storage_data.llen(key)
+                    writer.write(format_integer_success(length))
+                    await writer.drain()  # Flush write buffer
+
+                    i += 2
 
                 # Retrieve a range of elements from a list
                 case "LRANGE":

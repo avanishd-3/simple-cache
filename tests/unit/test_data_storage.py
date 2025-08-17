@@ -99,7 +99,14 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
         result = await self.storage.lrange("testlist", -1, -2)
         self.assertEqual(result, [])
 
+    async def test_llen_with_existing_key(self):
+        await self.storage.rpush("mylist", ["a", "b", "c"])
+        length = await self.storage.llen("mylist")
+        self.assertEqual(length, 3)
 
+    async def test_llen_with_nonexistent_key(self):
+        length = await self.storage.llen("nope")
+        self.assertEqual(length, 0)
 
 if __name__ == "__main__":
     unittest.main()
