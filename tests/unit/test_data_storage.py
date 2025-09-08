@@ -129,5 +129,42 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
         result: str = await self.storage.lpop("mylist", 1)
         self.assertEqual(result, None)
 
+    async def test_blpop_no_timeout(self):
+        async def blpop_task():
+            result = await self.storage.blpop("mylist")
+            return result
+
+        task = asyncio.create_task(blpop_task())
+        await asyncio.sleep(0.01)
+        await self.storage.rpush("mylist", ["first"])
+        result = await task
+
+        should_be: dict = {"list_name": "mylist", "removed_item": "first"}
+        self.assertEqual(result, should_be)
+
+    async def test_blpop_key_appended_before_timeout(self):
+        async def blpop_task():
+            result = await self.storage.blpop("mylist", timeout=1)
+            return result
+
+        task = asyncio.create_task(blpop_task())
+        await asyncio.sleep(0.01)
+        await self.storage.rpush("mylist", ["item"])
+        result = await task
+
+        should_be: dict = {"list_name": "mylist", "removed_item": "item"}
+        self.assertEqual(result, should_be)
+
+    async def test_blpop_timeout_occurs(self):
+        async def blpop_task():
+            result = await self.storage.blpop("mylist", timeout=0.1)
+            return result
+
+        task = asyncio.create_task(blpop_task())
+        await asyncio.sleep(0.1)
+        await self.storage.rpush("mylist", ["item"]) # Need this here to make sure None is returning due to timeout, not because list was never appended to
+        result = await task
+        self.assertIsNone(result, None)
+
 if __name__ == "__main__":
     unittest.main()

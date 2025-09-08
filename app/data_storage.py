@@ -2,11 +2,16 @@ import asyncio
 from collections import namedtuple
 import logging
 
+from typing import Any
+
 import time
+
+import heapq
 
 logging.basicConfig(level=logging.INFO)
 
 ValueWithExpiry = namedtuple("ValueWithExpiry", ["value", "expiry_time"])
+BlockedClientFutureResult = namedtuple("BlockedClientFutureResult", ["key", "removed_item", "timestamp"])
 
 # TODO -> Turn lists into linked list from array (See: https://redis.io/docs/latest/develop/data-types/lists/)
 class DataStorage():
@@ -17,6 +22,46 @@ class DataStorage():
     def __init__(self):
         self.storage_dict = {}
         self.lock = asyncio.Lock()
+        # Is a heap
+        self.blocked_clients = {}  # key: list blocking for, value: (timestamp, future, key)
+
+    def _unblock_clients_and_pop(self, key: str, accessed_list: list) -> None:
+        """
+        Unblock any clients that used BLPOP to wait on this list.
+        Pop the first item from the list for each unblocked client.
+        """
+
+        # Need to make sure futures result are set based on their timestamp
+        # This is done by default, since dicts are ordered based on insertion order in Python 3.7+
+        futures_to_set: dict[asyncio.Future[Any], BlockedClientFutureResult] = {}
+        item_to_remove = accessed_list[0] if len(accessed_list) > 0 else None
+
+        # Unblock any clients waiting on this list
+        if key in self.blocked_clients and len(self.blocked_clients[key]) > 0:
+            num_blocked_clients: int = len(self.blocked_clients[key])
+            logging.info(f" Unblocking {num_blocked_clients} clients blocked on list: {key}")
+
+            while len(self.blocked_clients[key]) > 0:
+                client_timestamp: float = self.blocked_clients[key][0][0]
+                logging.info(f"Unblocking client with timestamp: {client_timestamp}")
+
+                _, future, list_key = heapq.heappop(self.blocked_clients[key])
+                if not future.done():
+                    # namedtuples are immutable by default, so need to create a new one
+                    # TODO: Add expiry time support for lists
+                    new_item = ValueWithExpiry(accessed_list, None)
+                    logging.info(f"List after unblocking client w/ timestamp {client_timestamp}: {new_item.value}")
+                    self.storage_dict[key] = new_item # Update value in storage
+                    futures_to_set[future] = BlockedClientFutureResult(list_key, item_to_remove, client_timestamp)
+                else:
+                    logging.info(f"Future already done for blocked client on list: {key}")
+
+        # Set results here so async doesn't take over and continue w/ BLPOP
+        if len(futures_to_set) > 0:
+            removed_item = accessed_list.pop(0)
+        for future, blocked_info in futures_to_set.items():
+            new_blocked_info = BlockedClientFutureResult(blocked_info.key, removed_item, blocked_info.timestamp)
+            future.set_result(new_blocked_info)
 
     async def set(self, key: str, value: str, expiry_time: float | None = None) -> None:
         async with self.lock:
@@ -61,9 +106,15 @@ class DataStorage():
             accessed_list.extend(items) # Append but for an entire list
             logging.info(f"Appended {items} to list {key}")
 
+        # Need to get it here b/c list length may have changed after unblocking clients
+        list_len: int = len(accessed_list)
+
+        # Unblock any clients waiting on this list
+        self._unblock_clients_and_pop(key, accessed_list)
+
         # Return number of elements in list
-        return len(accessed_list)
-    
+        return list_len
+
     async def lpush(self, key: str, items: list) -> int:
         """
         Add items to the beginning of a list stored at the specified key in reverse order.
@@ -92,8 +143,14 @@ class DataStorage():
             
             logging.info(f"Prepended {items} to list {key}")
 
+        # Need to get it here b/c list length may have changed after unblocking clients
+        list_len: int = len(accessed_list)
+
+        # Unblock any clients waiting on this list
+        self._unblock_clients_and_pop(key, accessed_list)
+
         # Return number of elements in list
-        return len(accessed_list)
+        return list_len
     
     async def llen(self, key: str) -> int:
         """
@@ -193,37 +250,33 @@ class DataStorage():
                 logging.info(f"Key not found or not a list: {key}")
                 return None # RESP specification returns null bulk string for this
             
-    async def blpop(self, key: str, blocking_time: int = 0) -> tuple[str, list | None]:
+    async def blpop(self, key: str, timeout: int = 0) -> tuple[str, list | None]:
         """
         Block for specified blocking time (in seconds) until an element is available in the list.
 
         If blocking time is 0, block indefinitely.
         """
 
+        future = asyncio.get_event_loop().create_future()
         curr_time: float = time.time()
-        stop_blocking_time: float = curr_time + blocking_time if blocking_time > 0 else float("inf")
 
-        while curr_time < stop_blocking_time:
-            async with self.lock:
-                # Fetch item every time so we get the latest state
-                item = self.storage_dict.get(key, None)
-                if item is not None and isinstance(item.value, list) and len(item.value) > 0:
-                    # Found an item to pop
-                    logging.info(f"No longer blocked: found item to pop from {key}")
-                    # Release lock so lpop can access the storage
-                    self.lock.release()
-                    # Get removed item
-                    removed_item: str = (await self.lpop(key, count=1))[0]  # List will be only 1 element
-                    # Acquire lock again so context manager works
-                    await self.lock.acquire()
-                    logging.info(f"Removed item from {key}: {removed_item}")
-                    return {"list_name": key, "removed_item": removed_item}
+        if key not in self.blocked_clients:
+            self.blocked_clients[key] = []
+        heapq.heappush(self.blocked_clients[key], (curr_time, future, key))
 
-            # So blocking times of 100 ms or less don't timeout immediately
-            # This doesn't work for 101 ms or 102ms but these times are uncommon
-            time_to_sleep: float = min(blocking_time / 10, 0.1) 
-            await asyncio.sleep(time_to_sleep)
-            curr_time = time.time()
+        try:
+            await asyncio.wait_for(future, timeout=timeout if timeout > 0 else None)
+            blocked_info: BlockedClientFutureResult = future.result()
+            logging.info(f"BLPOP -> Removed {blocked_info.removed_item} from {blocked_info.key} for client w/ timestamp {blocked_info.timestamp}")
+            return {"list_name": blocked_info.key, "removed_item": blocked_info.removed_item}
+        except asyncio.TimeoutError:
+            # Remove from queue if timed out
+            logging.info(f"TimeoutError in blpop for key: {key}")
 
-        logging.info(f"Blocking pop timed out for {key}")
-        return None  # RESP specification returns null bulk string for this
+            # Remove blocked client from queue
+            if key in self.blocked_clients:
+                # Rebuild heap without the timed-out future
+                self.blocked_clients[key] = [(t, f, k) for (t, f, k) in self.blocked_clients[key] if f != future]
+                heapq.heapify(self.blocked_clients[key])
+
+            return None # RESP specification returns null bulk string for this

@@ -208,7 +208,6 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                         i += 2
 
                 # Remove elements from the left with blocking
-                # TODO -> Add support for client that has been waiting for longer getting the response first
                 case "BLPOP":
                     key: str = command_list[i + 1] if i + 1 < command_list_len else ""
                     blocking_time: float = float(command_list[i + 2]) if i + 2 < command_list_len else 0
