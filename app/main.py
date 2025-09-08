@@ -129,6 +129,9 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                     elif key_type is Type[list]:
                         logging.info(f"Sent TYPE list for key {key}")
                         writer.write(format_simple_string("list"))
+                    elif key_type is Type[dict]:
+                        logging.info(f"Sent TYPE stream for key {key}")
+                        writer.write(format_simple_string("stream"))
                     else: # TODO: Remove this when type is fully implemented
                         logging.info(f"Sent TYPE unknown for key {key}")
                         writer.write(format_simple_string("unknown"))
@@ -259,6 +262,29 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                         i += 3
                     else:
                         i += 2
+
+                # Add an entry to a stream
+                # Stream is created first if it doesn't exist
+                case "XADD":
+                    key: str = command_list[i + 1] if i + 1 < command_list_len else ""
+                    id: str = command_list[i + 2] if i + 2 < command_list_len else ""
+
+                    # Get all field-value pairs
+                    field_value_pairs: dict = {}
+                    for j in range(i + 3, command_list_len, 2):
+                        if j + 1 < command_list_len:
+                            field_value_pairs[command_list[j]] = command_list[j + 1]
+                        else:
+                            field_value_pairs[command_list[j]] = ""
+
+                    logging.info(f"XADD: {key}, id: {id}, field-value pairs: {field_value_pairs}")
+
+                    entry_id: str = await storage_data.xadd(key, id, field_value_pairs)
+                    writer.write(format_bulk_string_success(entry_id)) # Requires bulk string response
+                    await writer.drain()  # Flush write buffer
+
+                    # Move to next command
+                    i += 3 + (2 * len(field_value_pairs))
 
                 case _:
                     # Keep this for now, change/remove when done

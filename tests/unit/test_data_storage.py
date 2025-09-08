@@ -4,6 +4,8 @@ import time
 
 from app.data_storage import DataStorage
 
+from typing import Type
+
 class TestDataStorage(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.storage = DataStorage()
@@ -27,17 +29,22 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
 
     async def test_type_of_nonexistent_key(self):
         key_type = await self.storage.key_type("nope")
-        self.assertIsNone(key_type)
+        self.assertEqual(key_type, Type[None])
 
     async def test_type_of_string_key(self):
         await self.storage.set("mystring", "hello")
         key_type = await self.storage.key_type("mystring")
-        self.assertEqual(key_type, str)
+        self.assertEqual(key_type, Type[str])
 
     async def test_type_of_list_key(self):
         await self.storage.rpush("mylist", ["a", "b", "c"])
         key_type = await self.storage.key_type("mylist")
-        self.assertEqual(key_type, list)
+        self.assertEqual(key_type, Type[list])
+
+    async def test_type_of_stream_key(self):
+        await self.storage.xadd("mystream", "1-0", {"field1": "value1"})
+        key_type = await self.storage.key_type("mystream")
+        self.assertEqual(key_type, Type[dict])
 
     async def test_rpush_creates_list_if_it_doesnt_exist(self):
         length = await self.storage.rpush("numbers", [1, 2])
@@ -179,6 +186,20 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
         await self.storage.rpush("mylist", ["item"]) # Need this here to make sure None is returning due to timeout, not because list was never appended to
         result = await task
         self.assertIsNone(result, None)
+
+    async def test_xadd_creates_stream_if_not_exists(self):
+        entry_id = await self.storage.xadd("mystream", "1-0", {"field1": "value1"})
+        self.assertEqual(entry_id, "1-0")
+        key_len: float = len(self.storage.storage_dict["mystream"].value)
+        self.assertEqual(key_len, 1)
+
+    async def test_xadd_appends_to_existing_stream(self):
+        await self.storage.xadd("mystream", "1-0", {"field1": "value1"})
+        entry_id = await self.storage.xadd("mystream", "1-1", {"field2": "value2"})
+        self.assertEqual(entry_id, "1-1")
+        key_len: float = len(self.storage.storage_dict["mystream"].value)
+        self.assertEqual(key_len, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

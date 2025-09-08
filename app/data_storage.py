@@ -108,6 +108,9 @@ class DataStorage():
             elif isinstance(item.value, list):
                 logging.info(f"Key '{key}' is of type list")
                 return Type[list]
+            elif isinstance(item.value, dict):
+                logging.info(f"Key '{key}' is of type stream")
+                return Type[dict]
             else:
                 logging.info(f"Key '{key}' is of unknown type")
                 return Type[None]
@@ -304,3 +307,24 @@ class DataStorage():
                 heapq.heapify(self.blocked_clients[key])
 
             return None # RESP specification returns null bulk string for this
+        
+    # TODO: Implement stream as radix trie instead of dict
+    async def xadd(self, key: str, id: str, field_value_pairs: dict) -> str:
+        """
+        Add an entry to a stream stored at the specified key.
+
+        Create the stream if it doesn't exist.
+        """
+        async with self.lock:
+            if key not in self.storage_dict:
+                self.storage_dict[key] = ValueWithExpiry({}, None)
+                logging.info(f"Created new stream for key: {key}")
+
+            accessed_stream: dict = self.storage_dict[key].value
+            accessed_stream[id] = field_value_pairs
+            logging.info(f"Appended {field_value_pairs} to stream {key}")
+
+            logging.info(f"Stream after XADD: {accessed_stream}")
+
+        # RESP specification returns the ID of the entry created for this
+        return id
