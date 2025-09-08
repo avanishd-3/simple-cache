@@ -1,6 +1,6 @@
-def format_simple_success(message: str) -> bytes:
+def format_simple_string(message: str) -> bytes:
     """
-    Format a simple Redis success response.
+    Format a simple Redis string.
     """
     return f"+{message}\r\n".encode("utf-8")
 

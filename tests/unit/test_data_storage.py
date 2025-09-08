@@ -25,6 +25,20 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
         value = await self.storage.get("expiring")
         self.assertIsNone(value)
 
+    async def test_type_of_nonexistent_key(self):
+        key_type = await self.storage.key_type("nope")
+        self.assertIsNone(key_type)
+
+    async def test_type_of_string_key(self):
+        await self.storage.set("mystring", "hello")
+        key_type = await self.storage.key_type("mystring")
+        self.assertEqual(key_type, str)
+
+    async def test_type_of_list_key(self):
+        await self.storage.rpush("mylist", ["a", "b", "c"])
+        key_type = await self.storage.key_type("mylist")
+        self.assertEqual(key_type, list)
+
     async def test_rpush_creates_list_if_it_doesnt_exist(self):
         length = await self.storage.rpush("numbers", [1, 2])
         self.assertEqual(length, 2)

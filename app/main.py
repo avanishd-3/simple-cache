@@ -2,9 +2,12 @@ import asyncio
 import logging
 import time
 
+# Type annotations
+from typing import Type
+
 # Internal imports
 from .format_response import (
-    format_simple_success,
+    format_simple_string,
     format_bulk_string_success,
     format_integer_success,
     format_resp_array,
@@ -53,7 +56,7 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
 
             match curr_command.upper():
                 case "PING":
-                    writer.write(format_simple_success("PONG"))
+                    writer.write(format_simple_string("PONG"))
                     await writer.drain()  # Flush write buffer
 
                     logging.info("Sent PONG response")
@@ -61,7 +64,7 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                     i += 1  # Move to next command
                 case "ECHO":
                     msg: str = command_list[i + 1] if i + 1 < command_list_len else ""
-                    writer.write(format_simple_success(msg))
+                    writer.write(format_simple_string(msg))
                     await writer.drain()  # Flush write buffer
 
                     logging.info(f"Sent ECHO response: {msg}")
@@ -90,7 +93,7 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
 
                         logging.info(f"Set key without expiry: {key} = {value}")
 
-                    writer.write(format_simple_success("OK"))
+                    writer.write(format_simple_string("OK"))
                     await writer.drain()  # Flush write buffer
 
                 case "GET":
@@ -108,6 +111,29 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
 
                     await writer.drain()  # Flush write buffer
 
+                    i += 2  # Move to next command
+
+                case "TYPE":
+                    key: str = command_list[i + 1] if i + 1 < command_list_len else ""
+
+                    key_type: Type[None | str | list] = await storage_data.key_type(key)
+
+                    logging.info(f"TYPE: {key} is of type {key_type}")
+
+                    if key_type is Type[None]:
+                        logging.info(f"Sent TYPE none for key {key}")
+                        writer.write(format_simple_string("none"))
+                    elif key_type is Type[str]:
+                        logging.info(f"Sent TYPE string for key {key}")
+                        writer.write(format_simple_string("string"))
+                    elif key_type is Type[list]:
+                        logging.info(f"Sent TYPE list for key {key}")
+                        writer.write(format_simple_string("list"))
+                    else: # TODO: Remove this when type is fully implemented
+                        logging.info(f"Sent TYPE unknown for key {key}")
+                        writer.write(format_simple_string("unknown"))
+
+                    await writer.drain()  # Flush write buffer
                     i += 2  # Move to next command
 
                 # Appends elements to a list

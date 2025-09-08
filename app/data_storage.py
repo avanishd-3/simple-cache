@@ -2,7 +2,7 @@ import asyncio
 from collections import namedtuple
 import logging
 
-from typing import Any
+from typing import Any, Type
 
 import time
 
@@ -20,7 +20,7 @@ class DataStorage():
     """
 
     def __init__(self):
-        self.storage_dict = {}
+        self.storage_dict: dict[str, ValueWithExpiry] = {}
         self.lock = asyncio.Lock()
         # Is a heap
         self.blocked_clients = {}  # key: list blocking for, value: (timestamp, future, key)
@@ -87,6 +87,30 @@ class DataStorage():
             else:
                 logging.info(f"Key not found: {key}")
                 return None
+            
+    # TODO: Add support for set, zset, hash, stream
+    async def key_type(self, key: str) -> Type[None | str | list]:
+        """
+        Return type of key
+
+        Redis types: string, list, set, zset, hash, stream
+
+        Currently supported types: string, list
+        """
+        async with self.lock:
+            item = self.storage_dict.get(key, None)
+            if item is None:
+                logging.info(f"Key not found: {key}")
+                return Type[None]
+            elif isinstance(item.value, str):
+                logging.info(f"Key '{key}' is of type string")
+                return Type[str]
+            elif isinstance(item.value, list):
+                logging.info(f"Key '{key}' is of type list")
+                return Type[list]
+            else:
+                logging.info(f"Key '{key}' is of unknown type")
+                return Type[None]
             
     async def rpush(self, key: str, items: list) -> int:
         """
