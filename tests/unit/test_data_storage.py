@@ -162,6 +162,7 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
 
         should_be: dict = {"list_name": "mylist", "removed_item": "first"}
         self.assertEqual(result, should_be)
+        self.assertEqual(await self.storage.llen("mylist"), 0)
 
     async def test_blpop_key_appended_before_timeout(self):
         async def blpop_task():
@@ -175,6 +176,7 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
 
         should_be: dict = {"list_name": "mylist", "removed_item": "item"}
         self.assertEqual(result, should_be)
+        self.assertEqual(await self.storage.llen("mylist"), 0)
 
     async def test_blpop_timeout_occurs(self):
         async def blpop_task():
