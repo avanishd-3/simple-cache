@@ -282,7 +282,20 @@ class DataStorage():
         Block for specified blocking time (in seconds) until an element is available in the list.
 
         If blocking time is 0, block indefinitely.
+
+        If the list exists and has elements, pop the first element and return immediately.
         """
+
+        # Check if list exists and has elements
+        # This works b/c lpop doesn't do anything if list is empty or doesn't exist
+        # So we can just call it and see if it returns something
+        lpop_result = await self.lpop(key, 1)
+        if lpop_result is not None:
+            logging.info(f"List {key} has items before BLPOP call, returning immediately")
+            return {"list_name": key, "removed_item": lpop_result[0]}
+        
+        # Block if list does not exist or is empty
+        logging.info(f"Blocking on list: {key} with timeout: {timeout}")
 
         future = asyncio.get_event_loop().create_future()
         curr_time: float = time.time()

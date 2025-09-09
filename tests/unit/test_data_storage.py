@@ -187,6 +187,14 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
         result = await task
         self.assertIsNone(result, None)
 
+    async def test_blpop_list_has_items_before_call(self):
+        await self.storage.rpush("mylist", ["a", "b", "c"])
+
+        result = await self.storage.blpop("mylist")
+        should_be: dict = {"list_name": "mylist", "removed_item": "a"}
+        self.assertEqual(result, should_be)
+        self.assertEqual(await self.storage.llen("mylist"), 2)
+
     async def test_xadd_creates_stream_if_not_exists(self):
         entry_id = await self.storage.xadd("mystream", "1-0", {"field1": "value1"})
         self.assertEqual(entry_id, "1-0")
