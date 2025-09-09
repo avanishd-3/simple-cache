@@ -374,7 +374,7 @@ class DataStorage():
             accessed_stream[id] = field_value_pairs
             logging.info(f"Appended {field_value_pairs} to stream {key}")
 
-            logging.info(f"Stream after XADD: {accessed_stream}")
+            logging.info(f"Stream {key} after XADD: {accessed_stream}")
 
         # RESP specification returns the ID of the entry created for this
         return id
