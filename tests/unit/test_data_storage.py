@@ -249,6 +249,33 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
             await self.storage.xadd("badstream", "not-id", {"field": "value"})
         self.assertIn("ERR Invalid stream ID specified as stream command argument", str(context.exception))
 
+    async def test_xadd_auto_generate_sequence_number_new_stream_with_time_0(self):
+        entry_id = await self.storage.xadd("autostream", "0-*", {"field": "value"})
+        self.assertEqual(entry_id, "0-1")
+        key_len: float = len(self.storage.storage_dict["autostream"].value)
+        self.assertEqual(key_len, 1)
+
+    async def test_xadd_auto_generate_sequence_number_new_stream_with_time_non_zero(self):
+        entry_id = await self.storage.xadd("autostream", "5-*", {"field": "value"})
+        self.assertEqual(entry_id, "5-0")
+        key_len: float = len(self.storage.storage_dict["autostream"].value)
+        self.assertEqual(key_len, 1)
+
+    async def test_xadd_auto_generate_sequence_number_existing_stream_time_non_zero(self):
+        await self.storage.xadd("autostream", "0-*", {"field": "value"})
+        entry_id = await self.storage.xadd("autostream", "5-*", {"field2": "value2"})
+        self.assertEqual(entry_id, "5-0")
+        key_len: float = len(self.storage.storage_dict["autostream"].value)
+        self.assertEqual(key_len, 2)
+
+    async def test_xadd_auto_generate_sequence_number_existing_stream_time_same_as_last(self):
+        await self.storage.xadd("autostream", "1-*", {"field": "value"})
+        entry_id = await self.storage.xadd("autostream", "1-*", {"field2": "value2"})
+        self.assertEqual(entry_id, "1-1")
+        key_len: float = len(self.storage.storage_dict["autostream"].value)
+        self.assertEqual(key_len, 2)
+
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -333,6 +333,9 @@ class DataStorage():
         # Entry ID must be in the format <milliseconds>-<sequence number>
         # TODO -> Add support for partially and fully auto-generated IDs
 
+        auto_generate_milliseconds: bool = False
+        auto_generate_sequence_number: bool = False
+
         id_parts = id.split("-")
         if len(id_parts) != 2:
             # Will catch negative milliseconds or sequence numbers
@@ -343,11 +346,18 @@ class DataStorage():
             milliseconds = int(id_parts[0])
             sequence_number = int(id_parts[1])
         except ValueError:
-            logging.info(f"Failed to add entry to stream with key {key} b/c ID {id} is not in correct format")
-            raise ValueError("ERR Invalid stream ID specified as stream command argument")
+            # Check if sequence number needs to be auto-generated
+            # TODO -> Add support for auto-generating milliseconds
+            if id_parts[1] == "*":
+                logging.info(f"Need to auto-generate sequence number for ID {id} in stream with key {key}")
+                auto_generate_sequence_number = True
+                
+            else:
+                logging.info(f"Failed to add entry to stream with key {key} b/c ID {id} is not in correct format")
+                raise ValueError("ERR Invalid stream ID specified as stream command argument")
         
-        # Check that ID is greater than 0-0
-        if milliseconds == 0 and sequence_number == 0:
+        # Check that ID is greater than 0-0 for explicitly specified IDs
+        if not auto_generate_milliseconds and not auto_generate_sequence_number and milliseconds == 0 and sequence_number == 0:
             logging.info(f"Failed to create stream with key {key} b/c ID was 0-0")
             raise ValueError("ERR The ID specified in XADD must be greater than 0-0")
         
@@ -361,12 +371,35 @@ class DataStorage():
                     last_milliseconds = int(last_id_parts[0])
                     last_sequence_number = int(last_id_parts[1])
 
-                    if milliseconds < last_milliseconds or (milliseconds == last_milliseconds and sequence_number <= last_sequence_number):
-                        logging.info(f"Failed to add entry to stream with key {key} b/c ID {id} is not greater than last entry ID {last_entry_id}")
-                        raise ValueError("ERR The ID specified in XADD is equal or smaller than the target stream top item")
+                    if auto_generate_sequence_number:
+                        # By definition, if the stream contains the same timestamp, it must be in the last entry
+                        # Default sequence number is 0 except when the time part is also 0
+                        # If time part is 0, then default sequence number is 1
+                        if milliseconds == 0:
+                            sequence_number = last_sequence_number + 1 if milliseconds == last_milliseconds else 1
+                        else:
+                            sequence_number = last_sequence_number + 1 if milliseconds == last_milliseconds else 0
+
+                        id = f"{milliseconds}-{sequence_number}"
+                        logging.info(f"Auto-generated sequence number, new ID is {id} for existing stream with key {key}")
+                    
+                    else:
+                        if milliseconds < last_milliseconds or (milliseconds == last_milliseconds and sequence_number <= last_sequence_number):
+                            logging.info(f"Failed to add entry to stream with key {key} b/c ID {id} is not greater than last entry ID {last_entry_id}")
+                            raise ValueError("ERR The ID specified in XADD is equal or smaller than the target stream top item")
                     
             # Add entry / create stream if it doesn't exist
             if key not in self.storage_dict:
+                if auto_generate_sequence_number:
+                    # If stream doesn't exist, then this must be the first entry
+                    # Default sequence number is 0 except when the time part is also 0
+                    # If time part is 0, then default sequence number must be 1
+                    sequence_number = 1 if milliseconds == 0 else 0
+
+                    id = f"{milliseconds}-{sequence_number}"
+                    logging.info(f"Auto-generated sequence number, new ID is {id} for new stream with key {key}")
+
+                # Add entry
                 self.storage_dict[key] = ValueWithExpiry({}, None)
                 logging.info(f"Created new stream for key: {key}")
 
