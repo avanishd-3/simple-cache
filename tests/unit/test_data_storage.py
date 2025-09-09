@@ -210,6 +210,45 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
         key_len: float = len(self.storage.storage_dict["mystream"].value)
         self.assertEqual(key_len, 2)
 
+    async def test_xadd_errors_with_id_equal_to_last(self):
+        await self.storage.xadd("some_key", "1-1", {"foo": "bar"})
+        with self.assertRaises(ValueError) as context:
+            await self.storage.xadd("some_key", "1-1", {"bar": "baz"})
+        self.assertIn("ERR The ID specified in XADD is equal or smaller than the target stream top item", str(context.exception))
+
+    async def test_xadd_errors_with_sequence_number_less_than_last(self):
+        await self.storage.xadd("another_key", "2-5", {"a": "b"})
+        with self.assertRaises(ValueError) as context:
+            await self.storage.xadd("another_key", "2-4", {"c": "d"})
+        self.assertIn("ERR The ID specified in XADD is equal or smaller than the target stream top item", str(context.exception))
+
+    async def test_xadd_errors_with_milliseconds_less_than_last(self):
+        await self.storage.xadd("stream_key", "3-10", {"x": "y"})
+        with self.assertRaises(ValueError) as context:
+            await self.storage.xadd("stream_key", "2-20", {"y": "z"})
+        self.assertIn("ERR The ID specified in XADD is equal or smaller than the target stream top item", str(context.exception))
+
+    async def test_xadd_errors_with_0_0_id_on_new_stream(self):
+        with self.assertRaises(ValueError) as context:
+            await self.storage.xadd("newstream", "0-0", {"field": "value"})
+        self.assertIn("ERR The ID specified in XADD must be greater than 0-0", str(context.exception))
+
+    async def test_xadd_has_0_0_error_id_0_0_on_existing_stream(self):
+        await self.storage.xadd("stream_key", "1-0", {"a": "b"})
+        with self.assertRaises(ValueError) as context:
+            await self.storage.xadd("stream_key", "0-0", {"c": "d"})
+        self.assertIn("ERR The ID specified in XADD must be greater than 0-0", str(context.exception))
+
+    async def test_xadd_errors_with_negative_numbers_in_id(self):
+        with self.assertRaises(ValueError) as context:
+            await self.storage.xadd("badstream", "-1--1", {"field": "value"})
+        self.assertIn("ERR Invalid stream ID specified as stream command argument", str(context.exception))
+
+    async def test_xadd_errors_with_invalid_id(self):
+        with self.assertRaises(ValueError) as context:
+            await self.storage.xadd("badstream", "not-id", {"field": "value"})
+        self.assertIn("ERR Invalid stream ID specified as stream command argument", str(context.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

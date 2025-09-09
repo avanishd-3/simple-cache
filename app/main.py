@@ -12,6 +12,7 @@ from .format_response import (
     format_integer_success,
     format_resp_array,
     format_null_bulk_string,
+    format_simple_error,
 )
 
 from .data_storage import DataStorage
@@ -277,10 +278,14 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                         else:
                             field_value_pairs[command_list[j]] = ""
 
-                    logging.info(f"XADD: {key}, id: {id}, field-value pairs: {field_value_pairs}")
-
-                    entry_id: str = await storage_data.xadd(key, id, field_value_pairs)
-                    writer.write(format_bulk_string_success(entry_id)) # Requires bulk string response
+                    try:
+                        entry_id: str = await storage_data.xadd(key, id, field_value_pairs)
+                        logging.info(f"XADD: {key}, id: {id}, field-value pairs: {field_value_pairs}")
+                        writer.write(format_bulk_string_success(entry_id)) # Requires bulk string response
+                    except ValueError as e:
+                        logging.error(f"XADD: Error adding entry to stream {key}: {e}")
+                        writer.write(format_simple_error(e)) # Error response -> Should have ERR in it
+                        
                     await writer.drain()  # Flush write buffer
 
                     # Move to next command

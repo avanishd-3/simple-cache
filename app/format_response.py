@@ -29,6 +29,12 @@ def format_resp_array(elements: list[str]) -> bytes:
 
 def format_null_bulk_string() -> bytes:
     """
-    Format a Redis error response.
+    Format a null bulk string Redis response.
     """
     return "$-1\r\n".encode("utf-8")
+
+def format_simple_error(message: str) -> bytes:
+    """
+    Format a simple Redis error response.
+    """
+    return f"-{message}\r\n".encode("utf-8")

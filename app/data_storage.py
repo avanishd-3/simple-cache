@@ -328,7 +328,44 @@ class DataStorage():
 
         Create the stream if it doesn't exist.
         """
+
+        # Validate entry ID before adding entry to the stream
+        # Entry ID must be in the format <milliseconds>-<sequence number>
+        # TODO -> Add support for partially and fully auto-generated IDs
+
+        id_parts = id.split("-")
+        if len(id_parts) != 2:
+            # Will catch negative milliseconds or sequence numbers
+            logging.info(f"Failed to add entry to stream with key {key} b/c ID {id} is not in correct format")
+            raise ValueError("ERR Invalid stream ID specified as stream command argument")
+       
+        try:
+            milliseconds = int(id_parts[0])
+            sequence_number = int(id_parts[1])
+        except ValueError:
+            logging.info(f"Failed to add entry to stream with key {key} b/c ID {id} is not in correct format")
+            raise ValueError("ERR Invalid stream ID specified as stream command argument")
+        
+        # Check that ID is greater than 0-0
+        if milliseconds == 0 and sequence_number == 0:
+            logging.info(f"Failed to create stream with key {key} b/c ID was 0-0")
+            raise ValueError("ERR The ID specified in XADD must be greater than 0-0")
+        
         async with self.lock:
+            # Check that milliseconds is >= last entry's milliseconds
+            if key in self.storage_dict:
+                stream: dict = self.storage_dict[key].value
+                if len(stream) > 0:
+                    last_entry_id = list(stream.keys())[-1]
+                    last_id_parts = last_entry_id.split("-")
+                    last_milliseconds = int(last_id_parts[0])
+                    last_sequence_number = int(last_id_parts[1])
+
+                    if milliseconds < last_milliseconds or (milliseconds == last_milliseconds and sequence_number <= last_sequence_number):
+                        logging.info(f"Failed to add entry to stream with key {key} b/c ID {id} is not greater than last entry ID {last_entry_id}")
+                        raise ValueError("ERR The ID specified in XADD is equal or smaller than the target stream top item")
+                    
+            # Add entry / create stream if it doesn't exist
             if key not in self.storage_dict:
                 self.storage_dict[key] = ValueWithExpiry({}, None)
                 logging.info(f"Created new stream for key: {key}")
