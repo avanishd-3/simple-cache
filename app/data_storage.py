@@ -327,6 +327,11 @@ class DataStorage():
         Add an entry to a stream stored at the specified key.
 
         Create the stream if it doesn't exist.
+
+        The id can be specified in 3 formats: 
+           1. Explicitly specified as <milliseconds>-<sequence number>
+           2. Partially auto-generated as <milliseconds>-*
+           3. Fully auto-generated as *
         """
 
         # Validate entry ID before adding entry to the stream
@@ -336,25 +341,36 @@ class DataStorage():
         auto_generate_milliseconds: bool = False
         auto_generate_sequence_number: bool = False
 
-        id_parts = id.split("-")
-        if len(id_parts) != 2:
-            # Will catch negative milliseconds or sequence numbers
-            logging.info(f"Failed to add entry to stream with key {key} b/c ID {id} is not in correct format")
-            raise ValueError("ERR Invalid stream ID specified as stream command argument")
-       
-        try:
-            milliseconds = int(id_parts[0])
-            sequence_number = int(id_parts[1])
-        except ValueError:
-            # Check if sequence number needs to be auto-generated
-            # TODO -> Add support for auto-generating milliseconds
-            if id_parts[1] == "*":
-                logging.info(f"Need to auto-generate sequence number for ID {id} in stream with key {key}")
-                auto_generate_sequence_number = True
-                
-            else:
+        if id == "*":
+            auto_generate_milliseconds = True
+            auto_generate_sequence_number = True
+            logging.info(f"Need to auto-generate milliseconds and sequence number in stream with key {key}")
+
+            # Use current Unix time in milliseconds for time and 0 for sequence number
+            # Needs to be int for RESP response
+            milliseconds = int(time.time() * 1000)
+            sequence_number = 0 # Will be updated below if time already exists in stream
+
+        else:
+            id_parts = id.split("-")
+            if len(id_parts) != 2:
+                # Will catch negative milliseconds or sequence numbers
                 logging.info(f"Failed to add entry to stream with key {key} b/c ID {id} is not in correct format")
                 raise ValueError("ERR Invalid stream ID specified as stream command argument")
+       
+            try:
+                milliseconds = int(id_parts[0])
+                sequence_number = int(id_parts[1])
+            except ValueError:
+                # Check if sequence number needs to be auto-generated
+                # TODO -> Add support for auto-generating milliseconds
+                if id_parts[1] == "*":
+                    logging.info(f"Need to auto-generate sequence number for ID {id} in stream with key {key}")
+                    auto_generate_sequence_number = True
+                    
+                else:
+                    logging.info(f"Failed to add entry to stream with key {key} b/c ID {id} is not in correct format")
+                    raise ValueError("ERR Invalid stream ID specified as stream command argument")
         
         # Check that ID is greater than 0-0 for explicitly specified IDs
         if not auto_generate_milliseconds and not auto_generate_sequence_number and milliseconds == 0 and sequence_number == 0:
@@ -382,6 +398,13 @@ class DataStorage():
 
                         id = f"{milliseconds}-{sequence_number}"
                         logging.info(f"Auto-generated sequence number, new ID is {id} for existing stream with key {key}")
+
+                    elif auto_generate_milliseconds:
+                        if milliseconds == last_milliseconds:
+                            sequence_number = last_sequence_number + 1
+
+                        id = f"{milliseconds}-{sequence_number}"
+                        logging.info(f"Auto-generated id, new ID is {id} for existing stream with key {key}")
                     
                     else:
                         if milliseconds < last_milliseconds or (milliseconds == last_milliseconds and sequence_number <= last_sequence_number):

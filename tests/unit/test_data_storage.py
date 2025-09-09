@@ -2,9 +2,14 @@ import unittest
 import asyncio
 import time
 
+from unittest.mock import Mock, patch
+
 from app.data_storage import DataStorage
 
 from typing import Type
+
+mock_time = Mock()
+mock_time.return_value = 1234567890.0
 
 class TestDataStorage(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
@@ -275,6 +280,27 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
         key_len: float = len(self.storage.storage_dict["autostream"].value)
         self.assertEqual(key_len, 2)
 
+    # Not testing where a time part already exists in the stream and the sequence number is incremented
+    # since this requires sending 2 commands in the same millisecond
+    async def test_xadd_fully_auto_generated_id_new_stream(self):
+        entry_id = await self.storage.xadd("autostream", "*", {"field": "value"})
+        # ID should be current time in milliseconds-0
+        current_millis = int(time.time() * 1000)
+        expected_id = f"{current_millis}-0"
+        self.assertEqual(entry_id, expected_id)
+        key_len: float = len(self.storage.storage_dict["autostream"].value)
+        self.assertEqual(key_len, 1)
+
+    @patch('time.time', mock_time)
+    async def test_xadd_fully_auto_generated_id_same_time_as_previous_entry(self):
+        await self.storage.xadd("autostream", "*", {"field": "value"})
+        entry_id = await self.storage.xadd("autostream", "*", {"field2": "value2"})
+        
+        # ID should be mock time in milliseconds-1
+        expected_id = f"{int(time.time() * 1000)}-1"
+        self.assertEqual(entry_id, expected_id)
+        key_len: float = len(self.storage.storage_dict["autostream"].value)
+        self.assertEqual(key_len, 2)
 
 
 if __name__ == "__main__":
