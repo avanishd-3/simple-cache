@@ -331,7 +331,7 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result, expected)
 
-    async def test_x_range_sequence_number_not_provided(self):
+    async def test_xrange_sequence_number_not_provided(self):
         await self.storage.xadd("some_key", "1526985054069-0", {"temperature": "36", "humidity": "95"})
         await self.storage.xadd("some_key", "1526985054079-0", {"temperature": "37", "humidity": "94"})
         
@@ -357,18 +357,18 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result, expected)
 
-    async def test_x_range_non_existent_stream(self):
+    async def test_xrange_non_existent_stream(self):
         result = await self.storage.xrange("nope", "0-0", "9999-9999")
         self.assertEqual(result, [])
 
-    async def test_x_range_start_greater_than_end(self):
+    async def test_xrange_start_greater_than_end(self):
         await self.storage.xadd("stream_key", "0-1", {"foo": "bar"})
         await self.storage.xadd("stream_key", "0-2", {"bar": "baz"})
 
         result = await self.storage.xrange("stream_key", "0-2", "0-1")
         self.assertEqual(result, [])
 
-    async def test_x_range_errors_when_sequence_is_not_a_number(self):
+    async def test_xrange_errors_when_sequence_is_not_a_number(self):
         await self.storage.xadd("stream_key", "0-1", {"foo": "bar"})
         await self.storage.xadd("stream_key", "0-2", {"bar": "baz"})
 
@@ -376,7 +376,7 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
             await self.storage.xrange("stream_key", "0-one", "0-2")
         self.assertIn("ERR Invalid stream ID specified as stream command argument", str(context.exception))
 
-    async def test_x_range_errors_when_milliseconds_is_not_a_number(self):
+    async def test_xrange_errors_when_milliseconds_is_not_a_number(self):
         await self.storage.xadd("stream_key", "0-1", {"foo": "bar"})
         await self.storage.xadd("stream_key", "0-2", {"bar": "baz"})
 
@@ -384,7 +384,7 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
             await self.storage.xrange("stream_key", "zero-1", "0-2")
         self.assertIn("ERR Invalid stream ID specified as stream command argument", str(context.exception))
 
-    async def test_x_range_errors_when_sequence_is_negative(self):
+    async def test_xrange_errors_when_sequence_is_negative(self):
         await self.storage.xadd("stream_key", "0-1", {"foo": "bar"})
         await self.storage.xadd("stream_key", "0-2", {"bar": "baz"})
 
@@ -396,7 +396,7 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
             await self.storage.xrange("stream_key", "0-1", "0--2")
         self.assertIn("ERR Invalid stream ID specified as stream command argument", str(context.exception))
 
-    async def test_x_range_errors_with_milliseconds_is_negative(self):
+    async def test_xrange_errors_with_milliseconds_is_negative(self):
         await self.storage.xadd("stream_key", "0-1", {"foo": "bar"})
         await self.storage.xadd("stream_key", "0-2", {"bar": "baz"})
 
@@ -404,7 +404,7 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
             await self.storage.xrange("stream_key", "-5-0", "0-2")
         self.assertIn("ERR Invalid stream ID specified as stream command argument", str(context.exception))
 
-    async def test_x_range_with_count(self):
+    async def test_xrange_with_count(self):
         await self.storage.xadd("stream_key", "0-1", {"foo": "bar"})
         await self.storage.xadd("stream_key", "0-2", {"bar": "baz"})
         await self.storage.xadd("stream_key", "0-3", {"baz": "foo"})
@@ -428,7 +428,7 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result, expected)
 
-    async def test_x_range_with_minus_as_start(self):
+    async def test_xrange_with_minus_as_start(self):
         await self.storage.xadd("stream_key", "0-1", {"foo": "bar"})
         await self.storage.xadd("stream_key", "0-2", {"bar": "baz"})
         await self.storage.xadd("stream_key", "0-3", {"baz": "foo"})
@@ -452,7 +452,7 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result, expected)
 
-    async def test_x_range_with_plus_as_end(self):
+    async def test_xrange_with_plus_as_end(self):
         await self.storage.xadd("stream_key", "0-1", {"foo": "bar"})
         await self.storage.xadd("stream_key", "0-2", {"bar": "baz"})
         await self.storage.xadd("stream_key", "0-3", {"baz": "foo"})
