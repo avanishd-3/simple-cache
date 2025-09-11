@@ -286,8 +286,13 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
         entry_id = await self.storage.xadd("autostream", "*", {"field": "value"})
         # ID should be current time in milliseconds-0
         current_millis = int(time.time() * 1000)
-        expected_id = f"{current_millis}-0"
-        self.assertEqual(entry_id, expected_id)
+
+        # Time sometimes changes between calls, so allow for that
+        expected_id_1 = f"{current_millis}-0"
+        expected_id_2 = f"{current_millis+1}-0"
+
+        should_be_true = entry_id == expected_id_1 or entry_id == expected_id_2
+        self.assertTrue(should_be_true)
         key_len: float = len(self.storage.storage_dict["autostream"].value)
         self.assertEqual(key_len, 1)
 
