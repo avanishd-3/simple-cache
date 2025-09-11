@@ -428,6 +428,54 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result, expected)
 
+    async def test_x_range_with_minus_as_start(self):
+        await self.storage.xadd("stream_key", "0-1", {"foo": "bar"})
+        await self.storage.xadd("stream_key", "0-2", {"bar": "baz"})
+        await self.storage.xadd("stream_key", "0-3", {"baz": "foo"})
+
+        result = await self.storage.xrange("stream_key", "-", "0-2")
+
+        expected = [
+            [
+                "0-1",
+                [
+                    "foo", "bar",
+                ]
+            ],
+            [
+                "0-2",
+                [
+                    "bar", "baz"
+                ]
+            ]
+        ]
+
+        self.assertEqual(result, expected)
+
+    async def test_x_range_with_plus_as_end(self):
+        await self.storage.xadd("stream_key", "0-1", {"foo": "bar"})
+        await self.storage.xadd("stream_key", "0-2", {"bar": "baz"})
+        await self.storage.xadd("stream_key", "0-3", {"baz": "foo"})
+
+        result = await self.storage.xrange("stream_key", "0-2", "+")
+
+        expected = [
+            [
+                "0-2",
+                [
+                    "bar", "baz",
+                ]
+            ],
+            [
+                "0-3",
+                [
+                    "baz", "foo"
+                ]
+            ]
+        ]
+
+        self.assertEqual(result, expected)
+
 
 if __name__ == "__main__":
     unittest.main()
