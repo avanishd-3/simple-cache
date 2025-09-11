@@ -307,6 +307,127 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
         key_len: float = len(self.storage.storage_dict["autostream"].value)
         self.assertEqual(key_len, 2)
 
+    async def test_xrange_basic(self):
+        await self.storage.xadd("stream_key", "0-1", {"foo": "bar"})
+        await self.storage.xadd("stream_key", "0-2", {"bar": "baz"})
+        await self.storage.xadd("stream_key", "0-3", {"baz": "foo"})
+
+        result = await self.storage.xrange("stream_key", "0-2", "0-3")
+
+        expected = [
+            [
+                "0-2",
+                [
+                    "bar", "baz",
+                ]
+            ],
+            [
+                "0-3",
+                [
+                    "baz", "foo"
+                ]
+            ]
+        ]
+
+        self.assertEqual(result, expected)
+
+    async def test_x_range_sequence_number_not_provided(self):
+        await self.storage.xadd("some_key", "1526985054069-0", {"temperature": "36", "humidity": "95"})
+        await self.storage.xadd("some_key", "1526985054079-0", {"temperature": "37", "humidity": "94"})
+        
+
+        result = await self.storage.xrange("some_key", "1526985054069", "1526985054079")
+
+        expected = [
+            [
+                "1526985054069-0",
+                [
+                    "temperature", "36",
+                    "humidity", "95"
+                ]
+            ],
+            [
+                "1526985054079-0",
+                [
+                    "temperature", "37",
+                    "humidity", "94"
+                ]
+            ]
+        ]
+
+        self.assertEqual(result, expected)
+
+    async def test_x_range_non_existent_stream(self):
+        result = await self.storage.xrange("nope", "0-0", "9999-9999")
+        self.assertEqual(result, [])
+
+    async def test_x_range_start_greater_than_end(self):
+        await self.storage.xadd("stream_key", "0-1", {"foo": "bar"})
+        await self.storage.xadd("stream_key", "0-2", {"bar": "baz"})
+
+        result = await self.storage.xrange("stream_key", "0-2", "0-1")
+        self.assertEqual(result, [])
+
+    async def test_x_range_errors_when_sequence_is_not_a_number(self):
+        await self.storage.xadd("stream_key", "0-1", {"foo": "bar"})
+        await self.storage.xadd("stream_key", "0-2", {"bar": "baz"})
+
+        with self.assertRaises(ValueError) as context:
+            await self.storage.xrange("stream_key", "0-one", "0-2")
+        self.assertIn("ERR Invalid stream ID specified as stream command argument", str(context.exception))
+
+    async def test_x_range_errors_when_milliseconds_is_not_a_number(self):
+        await self.storage.xadd("stream_key", "0-1", {"foo": "bar"})
+        await self.storage.xadd("stream_key", "0-2", {"bar": "baz"})
+
+        with self.assertRaises(ValueError) as context:
+            await self.storage.xrange("stream_key", "zero-1", "0-2")
+        self.assertIn("ERR Invalid stream ID specified as stream command argument", str(context.exception))
+
+    async def test_x_range_errors_when_sequence_is_negative(self):
+        await self.storage.xadd("stream_key", "0-1", {"foo": "bar"})
+        await self.storage.xadd("stream_key", "0-2", {"bar": "baz"})
+
+        with self.assertRaises(ValueError) as context:
+            await self.storage.xrange("stream_key", "-1-0", "0-2")
+        self.assertIn("ERR Invalid stream ID specified as stream command argument", str(context.exception))
+
+        with self.assertRaises(ValueError) as context:
+            await self.storage.xrange("stream_key", "0-1", "0--2")
+        self.assertIn("ERR Invalid stream ID specified as stream command argument", str(context.exception))
+
+    async def test_x_range_errors_with_milliseconds_is_negative(self):
+        await self.storage.xadd("stream_key", "0-1", {"foo": "bar"})
+        await self.storage.xadd("stream_key", "0-2", {"bar": "baz"})
+
+        with self.assertRaises(ValueError) as context:
+            await self.storage.xrange("stream_key", "-5-0", "0-2")
+        self.assertIn("ERR Invalid stream ID specified as stream command argument", str(context.exception))
+
+    async def test_x_range_with_count(self):
+        await self.storage.xadd("stream_key", "0-1", {"foo": "bar"})
+        await self.storage.xadd("stream_key", "0-2", {"bar": "baz"})
+        await self.storage.xadd("stream_key", "0-3", {"baz": "foo"})
+
+        result = await self.storage.xrange("stream_key", "0-1", "0-3", count=2)
+
+        expected = [
+            [
+                "0-1",
+                [
+                    "foo", "bar",
+                ]
+            ],
+            [
+                "0-2",
+                [
+                    "bar", "baz"
+                ]
+            ]
+        ]
+
+        self.assertEqual(result, expected)
+
 
 if __name__ == "__main__":
     unittest.main()

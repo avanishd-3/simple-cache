@@ -434,3 +434,79 @@ class DataStorage():
 
         # RESP specification returns the ID of the entry created for this
         return id
+    
+    async def xrange(self, key: str, start: str, end: str, count: int | None = None) -> list:
+        """
+        Retrieve a range of entries from a stream stored at the specified key.
+
+        Start and end IDs are inclusive.
+
+        If the sequence number is not specified, default to 0 for start and max sequence number for end.
+
+        The special ID "-" can be used to specify the smallest ID in the stream.
+
+        The special ID "+" can be used to specify the largest ID in the stream.
+
+        If count is specified, return at most count entries.
+        """
+
+        def id_less_than_equal(id1: str, id2: str) -> bool:
+            """
+            Return True if id1 <= id2
+            """
+            if id1 == "-" or id2 == "+":
+                return True
+            if id1 == "+" or id2 == "-":
+                return False
+
+            id1_parts = id1.split("-")
+            id2_parts = id2.split("-")
+
+            # Handle negative sequence numbers or milliseconds
+            if len(id1_parts) > 2 or len(id2_parts) > 2:
+                raise ValueError("ERR Invalid stream ID specified as stream command argument")
+
+            # Guaranteed to have at least 1 part
+            try:
+                milliseconds1 = int(id1_parts[0])
+                milliseconds2 = int(id2_parts[0])
+            except ValueError:
+                raise ValueError("ERR Invalid stream ID specified as stream command argument")
+           
+            try:
+                sequence_number1 = int(id1_parts[1])
+                sequence_number2 = int(id2_parts[1])
+            except IndexError:
+                sequence_number1 = 0
+
+                # Get max sequence number for milliseconds2
+                sequence_number2 = max(
+                    (int(entry_id.split("-")[1]) for entry_id in stream.keys() if entry_id.startswith(f"{milliseconds2}-")),
+                    default=0
+                )
+            except ValueError: # If sequence number is not specified as an integer
+                raise ValueError("ERR Invalid stream ID specified as stream command argument")
+
+            if milliseconds1 < milliseconds2:
+                return True
+            if milliseconds1 > milliseconds2:
+                return False
+            return sequence_number1 <= sequence_number2
+
+        async with self.lock:
+            item = self.storage_dict.get(key, None)
+            if item is not None and isinstance(item.value, dict):
+                stream: dict = item.value
+                entries: list = []
+
+                for entry_id, field_value_pairs in stream.items():
+                    if id_less_than_equal(start, entry_id) and id_less_than_equal(entry_id, end):
+                        entries.append([entry_id, [str(k) for pair in field_value_pairs.items() for k in pair]])
+                        if count is not None and len(entries) >= count:
+                            break
+
+                logging.info(f"Retrieved entries from {key} from ID {start} to {end}: {entries}")
+                return entries
+            else:
+                logging.info(f"Key not found or not a stream: {key}")
+                return []

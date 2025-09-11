@@ -291,6 +291,63 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                     # Move to next command
                     i += 3 + (2 * len(field_value_pairs))
 
+                case "XRANGE":
+                    key: str = command_list[i + 1] if i + 1 < command_list_len else ""
+                    start: str = command_list[i + 2] if i + 2 < command_list_len else "-"
+                    end: str = command_list[i + 3] if i + 3 < command_list_len else "+"
+                    count: int | None = int(command_list[i + 5]) if i + 4 < command_list_len and command_list[i + 4].upper() == "COUNT" and i + 5 < command_list_len else None
+
+                    logging.info(f"XRANGE: {key}, start: {start}, end: {end}, count: {count}")
+
+                    # If count is <= 0, no need to query storage, just return null bulk string
+                    # Null bulk string is what Redis returns in this situation
+                    if count is not None and count <= 0:
+                        logging.info(f"XRANGE: Invalid count for {key}: {count}")
+                        writer.write(format_null_bulk_string())
+
+                        await writer.drain()  # Flush write buffer
+                        i += 6
+                        continue
+
+                    try:
+                        entries: list = await storage_data.xrange(key, start, end, count)
+
+                        # Need to return RESP array of arrays
+                        # Each inner array represents an entry in the stream
+                        # The first item in the inner array is the entry ID
+                        # The second item is a list of key values pairs (represented as list of strings)
+                        # Key value pairs in order they were added to the entry
+
+                        response: bytes = b""
+
+                        response += b"*" + str(len(entries)).encode("utf-8") + b"\r\n" # RESP array header
+
+
+                        for entry in entries:
+                            response += b"*" + str(len(entry)).encode("utf-8") + b"\r\n" # Inner array header
+                            for item in entry:
+                                if isinstance(item, list):
+                                    # List of field-value pairs
+                                    response += format_resp_array(item)
+                                else:
+                                    # Entry ID (string)
+                                    response += format_bulk_string_success(item)
+
+                        logging.info(f"XRANGE: Formatted RESP array response: {response}")
+                        writer.write(response) # RESP array response
+                        logging.info(f"XRANGE: Wrote array response for {key} with {len(entries)} entries")
+                    except ValueError as e:
+                        logging.error(f"XRANGE: Error retrieving entries from stream {key}: {e}")
+                        writer.write(format_simple_error(e)) # Error response -> Should have ERR in it
+
+                    await writer.drain()  # Flush write buffer
+
+                    # Move to next command
+                    if count is not None:
+                        i += 6
+                    else:
+                        i += 4
+
                 case _:
                     # Keep this for now, change/remove when done
                     writer.write(b"-Error: Unknown command\r\n")
