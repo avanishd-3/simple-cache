@@ -1,12 +1,12 @@
 def format_simple_string(message: str) -> bytes:
     """
-    Format a simple Redis string.
+    Format a simple RESP string.
     """
     return f"+{message}\r\n".encode("utf-8")
 
 def format_bulk_string_success(message: str) -> bytes:
     """
-    Format a Redis bulk success response.
+    Format a RESP bulk success response.
     """
     return f"${len(message)}\r\n{message}\r\n".encode("utf-8")
 
@@ -29,12 +29,12 @@ def format_resp_array(elements: list[str]) -> bytes:
 
 def format_null_bulk_string() -> bytes:
     """
-    Format a null bulk string Redis response.
+    Format a null bulk string RESP response.
     """
     return "$-1\r\n".encode("utf-8")
 
 def format_simple_error(message: str) -> bytes:
     """
-    Format a simple Redis error response.
+    Format a simple RESP error response.
     """
     return f"-{message}\r\n".encode("utf-8")
