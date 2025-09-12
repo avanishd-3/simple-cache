@@ -65,7 +65,7 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                     i += 1  # Move to next command
                 case "ECHO":
                     msg: str = command_list[i + 1] if i + 1 < command_list_len else ""
-                    writer.write(format_simple_string(msg))
+                    writer.write(format_bulk_string_success(msg))
                     await writer.drain()  # Flush write buffer
 
                     logging.info(f"Sent ECHO response: {msg}")
