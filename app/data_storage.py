@@ -2,7 +2,7 @@ import asyncio
 from collections import namedtuple
 import logging
 
-from typing import Any
+from typing import Any, Type
 
 import time
 
@@ -20,7 +20,7 @@ class DataStorage():
     """
 
     def __init__(self):
-        self.storage_dict = {}
+        self.storage_dict: dict[str, ValueWithExpiry] = {}
         self.lock = asyncio.Lock()
         # Is a heap
         self.blocked_clients = {}  # key: list blocking for, value: (timestamp, future, key)
@@ -87,6 +87,33 @@ class DataStorage():
             else:
                 logging.info(f"Key not found: {key}")
                 return None
+            
+    # TODO: Add support for set, zset, hash, stream
+    async def key_type(self, key: str) -> Type[None | str | list]:
+        """
+        Return type of key
+
+        Redis types: string, list, set, zset, hash, stream
+
+        Currently supported types: string, list
+        """
+        async with self.lock:
+            item = self.storage_dict.get(key, None)
+            if item is None:
+                logging.info(f"Key not found: {key}")
+                return Type[None]
+            elif isinstance(item.value, str):
+                logging.info(f"Key '{key}' is of type string")
+                return Type[str]
+            elif isinstance(item.value, list):
+                logging.info(f"Key '{key}' is of type list")
+                return Type[list]
+            elif isinstance(item.value, dict):
+                logging.info(f"Key '{key}' is of type stream")
+                return Type[dict]
+            else:
+                logging.info(f"Key '{key}' is of unknown type")
+                return Type[None]
             
     async def rpush(self, key: str, items: list) -> int:
         """
@@ -255,7 +282,20 @@ class DataStorage():
         Block for specified blocking time (in seconds) until an element is available in the list.
 
         If blocking time is 0, block indefinitely.
+
+        If the list exists and has elements, pop the first element and return immediately.
         """
+
+        # Check if list exists and has elements
+        # This works b/c lpop doesn't do anything if list is empty or doesn't exist
+        # So we can just call it and see if it returns something
+        lpop_result = await self.lpop(key, 1)
+        if lpop_result is not None:
+            logging.info(f"List {key} has items before BLPOP call, returning immediately")
+            return {"list_name": key, "removed_item": lpop_result[0]}
+        
+        # Block if list does not exist or is empty
+        logging.info(f"Blocking on list: {key} with timeout: {timeout}")
 
         future = asyncio.get_event_loop().create_future()
         curr_time: float = time.time()
@@ -280,3 +320,193 @@ class DataStorage():
                 heapq.heapify(self.blocked_clients[key])
 
             return None # RESP specification returns null bulk string for this
+        
+    # TODO: Implement stream as radix trie instead of dict
+    async def xadd(self, key: str, id: str, field_value_pairs: dict) -> str:
+        """
+        Add an entry to a stream stored at the specified key.
+
+        Create the stream if it doesn't exist.
+
+        The id can be specified in 3 formats: 
+           1. Explicitly specified as <milliseconds>-<sequence number>
+           2. Partially auto-generated as <milliseconds>-*
+           3. Fully auto-generated as *
+        """
+
+        # Validate entry ID before adding entry to the stream
+        # Entry ID must be in the format <milliseconds>-<sequence number>
+        # TODO -> Add support for partially and fully auto-generated IDs
+
+        auto_generate_milliseconds: bool = False
+        auto_generate_sequence_number: bool = False
+
+        if id == "*":
+            auto_generate_milliseconds = True
+            auto_generate_sequence_number = True
+            logging.info(f"Need to auto-generate milliseconds and sequence number in stream with key {key}")
+
+            # Use current Unix time in milliseconds for time and 0 for sequence number
+            # Needs to be int for RESP response
+            milliseconds = int(time.time() * 1000)
+            sequence_number = 0 # Will be updated below if time already exists in stream
+
+        else:
+            id_parts = id.split("-")
+            if len(id_parts) != 2:
+                # Will catch negative milliseconds or sequence numbers
+                logging.info(f"Failed to add entry to stream with key {key} b/c ID {id} is not in correct format")
+                raise ValueError("ERR Invalid stream ID specified as stream command argument")
+       
+            try:
+                milliseconds = int(id_parts[0])
+                sequence_number = int(id_parts[1])
+            except ValueError:
+                # Check if sequence number needs to be auto-generated
+                # TODO -> Add support for auto-generating milliseconds
+                if id_parts[1] == "*":
+                    logging.info(f"Need to auto-generate sequence number for ID {id} in stream with key {key}")
+                    auto_generate_sequence_number = True
+                    
+                else:
+                    logging.info(f"Failed to add entry to stream with key {key} b/c ID {id} is not in correct format")
+                    raise ValueError("ERR Invalid stream ID specified as stream command argument")
+        
+        # Check that ID is greater than 0-0 for explicitly specified IDs
+        if not auto_generate_milliseconds and not auto_generate_sequence_number and milliseconds == 0 and sequence_number == 0:
+            logging.info(f"Failed to create stream with key {key} b/c ID was 0-0")
+            raise ValueError("ERR The ID specified in XADD must be greater than 0-0")
+        
+        async with self.lock:
+            # Check that milliseconds is >= last entry's milliseconds
+            if key in self.storage_dict:
+                stream: dict = self.storage_dict[key].value
+                if len(stream) > 0:
+                    last_entry_id = list(stream.keys())[-1]
+                    last_id_parts = last_entry_id.split("-")
+                    last_milliseconds = int(last_id_parts[0])
+                    last_sequence_number = int(last_id_parts[1])
+
+                    if auto_generate_sequence_number:
+                        # By definition, if the stream contains the same timestamp, it must be in the last entry
+                        # Default sequence number is 0 except when the time part is also 0
+                        # If time part is 0, then default sequence number is 1
+                        if milliseconds == 0:
+                            sequence_number = last_sequence_number + 1 if milliseconds == last_milliseconds else 1
+                        else:
+                            sequence_number = last_sequence_number + 1 if milliseconds == last_milliseconds else 0
+
+                        id = f"{milliseconds}-{sequence_number}"
+                        logging.info(f"Auto-generated sequence number, new ID is {id} for existing stream with key {key}")
+
+                    elif auto_generate_milliseconds:
+                        if milliseconds == last_milliseconds:
+                            sequence_number = last_sequence_number + 1
+
+                        id = f"{milliseconds}-{sequence_number}"
+                        logging.info(f"Auto-generated id, new ID is {id} for existing stream with key {key}")
+                    
+                    else:
+                        if milliseconds < last_milliseconds or (milliseconds == last_milliseconds and sequence_number <= last_sequence_number):
+                            logging.info(f"Failed to add entry to stream with key {key} b/c ID {id} is not greater than last entry ID {last_entry_id}")
+                            raise ValueError("ERR The ID specified in XADD is equal or smaller than the target stream top item")
+                    
+            # Add entry / create stream if it doesn't exist
+            if key not in self.storage_dict:
+                if auto_generate_sequence_number:
+                    # If stream doesn't exist, then this must be the first entry
+                    # Default sequence number is 0 except when the time part is also 0
+                    # If time part is 0, then default sequence number must be 1
+                    sequence_number = 1 if milliseconds == 0 else 0
+
+                    id = f"{milliseconds}-{sequence_number}"
+                    logging.info(f"Auto-generated sequence number, new ID is {id} for new stream with key {key}")
+
+                # Add entry
+                self.storage_dict[key] = ValueWithExpiry({}, None)
+                logging.info(f"Created new stream for key: {key}")
+
+            accessed_stream: dict = self.storage_dict[key].value
+            accessed_stream[id] = field_value_pairs
+            logging.info(f"Appended {field_value_pairs} to stream {key}")
+
+            logging.info(f"Stream {key} after XADD: {accessed_stream}")
+
+        # RESP specification returns the ID of the entry created for this
+        return id
+    
+    async def xrange(self, key: str, start: str, end: str, count: int | None = None) -> list:
+        """
+        Retrieve a range of entries from a stream stored at the specified key.
+
+        Start and end IDs are inclusive.
+
+        If the sequence number is not specified, default to 0 for start and max sequence number for end.
+
+        The special ID "-" can be used to specify the smallest ID in the stream.
+
+        The special ID "+" can be used to specify the largest ID in the stream.
+
+        If count is specified, return at most count entries.
+        """
+
+        def id_less_than_equal(id1: str, id2: str) -> bool:
+            """
+            Return True if id1 <= id2
+            """
+            if id1 == "-" or id2 == "+":
+                return True
+            if id1 == "+" or id2 == "-":
+                return False
+
+            id1_parts = id1.split("-")
+            id2_parts = id2.split("-")
+
+            # Handle negative sequence numbers or milliseconds
+            if len(id1_parts) > 2 or len(id2_parts) > 2:
+                raise ValueError("ERR Invalid stream ID specified as stream command argument")
+
+            # Guaranteed to have at least 1 part
+            try:
+                milliseconds1 = int(id1_parts[0])
+                milliseconds2 = int(id2_parts[0])
+            except ValueError:
+                raise ValueError("ERR Invalid stream ID specified as stream command argument")
+           
+            try:
+                sequence_number1 = int(id1_parts[1])
+                sequence_number2 = int(id2_parts[1])
+            except IndexError:
+                sequence_number1 = 0
+
+                # Get max sequence number for milliseconds2
+                sequence_number2 = max(
+                    (int(entry_id.split("-")[1]) for entry_id in stream.keys() if entry_id.startswith(f"{milliseconds2}-")),
+                    default=0
+                )
+            except ValueError: # If sequence number is not specified as an integer
+                raise ValueError("ERR Invalid stream ID specified as stream command argument")
+
+            if milliseconds1 < milliseconds2:
+                return True
+            if milliseconds1 > milliseconds2:
+                return False
+            return sequence_number1 <= sequence_number2
+
+        async with self.lock:
+            item = self.storage_dict.get(key, None)
+            if item is not None and isinstance(item.value, dict):
+                stream: dict = item.value
+                entries: list = []
+
+                for entry_id, field_value_pairs in stream.items():
+                    if id_less_than_equal(start, entry_id) and id_less_than_equal(entry_id, end):
+                        entries.append([entry_id, [str(k) for pair in field_value_pairs.items() for k in pair]])
+                        if count is not None and len(entries) >= count:
+                            break
+
+                logging.info(f"Retrieved entries from {key} from ID {start} to {end}: {entries}")
+                return entries
+            else:
+                logging.info(f"Key not found or not a stream: {key}")
+                return []

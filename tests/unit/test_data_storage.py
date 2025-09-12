@@ -2,7 +2,14 @@ import unittest
 import asyncio
 import time
 
+from unittest.mock import Mock, patch
+
 from app.data_storage import DataStorage
+
+from typing import Type
+
+mock_time = Mock()
+mock_time.return_value = 1234567890.0
 
 class TestDataStorage(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
@@ -24,6 +31,25 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0.2)
         value = await self.storage.get("expiring")
         self.assertIsNone(value)
+
+    async def test_type_of_nonexistent_key(self):
+        key_type = await self.storage.key_type("nope")
+        self.assertEqual(key_type, Type[None])
+
+    async def test_type_of_string_key(self):
+        await self.storage.set("mystring", "hello")
+        key_type = await self.storage.key_type("mystring")
+        self.assertEqual(key_type, Type[str])
+
+    async def test_type_of_list_key(self):
+        await self.storage.rpush("mylist", ["a", "b", "c"])
+        key_type = await self.storage.key_type("mylist")
+        self.assertEqual(key_type, Type[list])
+
+    async def test_type_of_stream_key(self):
+        await self.storage.xadd("mystream", "1-0", {"field1": "value1"})
+        key_type = await self.storage.key_type("mystream")
+        self.assertEqual(key_type, Type[dict])
 
     async def test_rpush_creates_list_if_it_doesnt_exist(self):
         length = await self.storage.rpush("numbers", [1, 2])
@@ -141,6 +167,7 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
 
         should_be: dict = {"list_name": "mylist", "removed_item": "first"}
         self.assertEqual(result, should_be)
+        self.assertEqual(await self.storage.llen("mylist"), 0)
 
     async def test_blpop_key_appended_before_timeout(self):
         async def blpop_task():
@@ -154,6 +181,7 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
 
         should_be: dict = {"list_name": "mylist", "removed_item": "item"}
         self.assertEqual(result, should_be)
+        self.assertEqual(await self.storage.llen("mylist"), 0)
 
     async def test_blpop_timeout_occurs(self):
         async def blpop_task():
@@ -165,6 +193,289 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
         await self.storage.rpush("mylist", ["item"]) # Need this here to make sure None is returning due to timeout, not because list was never appended to
         result = await task
         self.assertIsNone(result, None)
+
+    async def test_blpop_list_has_items_before_call(self):
+        await self.storage.rpush("mylist", ["a", "b", "c"])
+
+        result = await self.storage.blpop("mylist")
+        should_be: dict = {"list_name": "mylist", "removed_item": "a"}
+        self.assertEqual(result, should_be)
+        self.assertEqual(await self.storage.llen("mylist"), 2)
+
+    async def test_xadd_creates_stream_if_not_exists(self):
+        entry_id = await self.storage.xadd("mystream", "1-0", {"field1": "value1"})
+        self.assertEqual(entry_id, "1-0")
+        key_len: float = len(self.storage.storage_dict["mystream"].value)
+        self.assertEqual(key_len, 1)
+
+    async def test_xadd_appends_to_existing_stream(self):
+        await self.storage.xadd("mystream", "1-0", {"field1": "value1"})
+        entry_id = await self.storage.xadd("mystream", "1-1", {"field2": "value2"})
+        self.assertEqual(entry_id, "1-1")
+        key_len: float = len(self.storage.storage_dict["mystream"].value)
+        self.assertEqual(key_len, 2)
+
+    async def test_xadd_errors_with_id_equal_to_last(self):
+        await self.storage.xadd("some_key", "1-1", {"foo": "bar"})
+        with self.assertRaises(ValueError) as context:
+            await self.storage.xadd("some_key", "1-1", {"bar": "baz"})
+        self.assertIn("ERR The ID specified in XADD is equal or smaller than the target stream top item", str(context.exception))
+
+    async def test_xadd_errors_with_sequence_number_less_than_last(self):
+        await self.storage.xadd("another_key", "2-5", {"a": "b"})
+        with self.assertRaises(ValueError) as context:
+            await self.storage.xadd("another_key", "2-4", {"c": "d"})
+        self.assertIn("ERR The ID specified in XADD is equal or smaller than the target stream top item", str(context.exception))
+
+    async def test_xadd_errors_with_milliseconds_less_than_last(self):
+        await self.storage.xadd("stream_key", "3-10", {"x": "y"})
+        with self.assertRaises(ValueError) as context:
+            await self.storage.xadd("stream_key", "2-20", {"y": "z"})
+        self.assertIn("ERR The ID specified in XADD is equal or smaller than the target stream top item", str(context.exception))
+
+    async def test_xadd_errors_with_0_0_id_on_new_stream(self):
+        with self.assertRaises(ValueError) as context:
+            await self.storage.xadd("newstream", "0-0", {"field": "value"})
+        self.assertIn("ERR The ID specified in XADD must be greater than 0-0", str(context.exception))
+
+    async def test_xadd_has_0_0_error_id_0_0_on_existing_stream(self):
+        await self.storage.xadd("stream_key", "1-0", {"a": "b"})
+        with self.assertRaises(ValueError) as context:
+            await self.storage.xadd("stream_key", "0-0", {"c": "d"})
+        self.assertIn("ERR The ID specified in XADD must be greater than 0-0", str(context.exception))
+
+    async def test_xadd_errors_with_negative_numbers_in_id(self):
+        with self.assertRaises(ValueError) as context:
+            await self.storage.xadd("badstream", "-1--1", {"field": "value"})
+        self.assertIn("ERR Invalid stream ID specified as stream command argument", str(context.exception))
+
+    async def test_xadd_errors_with_invalid_id(self):
+        with self.assertRaises(ValueError) as context:
+            await self.storage.xadd("badstream", "not-id", {"field": "value"})
+        self.assertIn("ERR Invalid stream ID specified as stream command argument", str(context.exception))
+
+    async def test_xadd_auto_generate_sequence_number_new_stream_with_time_0(self):
+        entry_id = await self.storage.xadd("autostream", "0-*", {"field": "value"})
+        self.assertEqual(entry_id, "0-1")
+        key_len: float = len(self.storage.storage_dict["autostream"].value)
+        self.assertEqual(key_len, 1)
+
+    async def test_xadd_auto_generate_sequence_number_new_stream_with_time_non_zero(self):
+        entry_id = await self.storage.xadd("autostream", "5-*", {"field": "value"})
+        self.assertEqual(entry_id, "5-0")
+        key_len: float = len(self.storage.storage_dict["autostream"].value)
+        self.assertEqual(key_len, 1)
+
+    async def test_xadd_auto_generate_sequence_number_existing_stream_time_non_zero(self):
+        await self.storage.xadd("autostream", "0-*", {"field": "value"})
+        entry_id = await self.storage.xadd("autostream", "5-*", {"field2": "value2"})
+        self.assertEqual(entry_id, "5-0")
+        key_len: float = len(self.storage.storage_dict["autostream"].value)
+        self.assertEqual(key_len, 2)
+
+    async def test_xadd_auto_generate_sequence_number_existing_stream_time_same_as_last(self):
+        await self.storage.xadd("autostream", "1-*", {"field": "value"})
+        entry_id = await self.storage.xadd("autostream", "1-*", {"field2": "value2"})
+        self.assertEqual(entry_id, "1-1")
+        key_len: float = len(self.storage.storage_dict["autostream"].value)
+        self.assertEqual(key_len, 2)
+
+    # Not testing where a time part already exists in the stream and the sequence number is incremented
+    # since this requires sending 2 commands in the same millisecond
+    async def test_xadd_fully_auto_generated_id_new_stream(self):
+        entry_id = await self.storage.xadd("autostream", "*", {"field": "value"})
+        # ID should be current time in milliseconds-0
+        current_millis = int(time.time() * 1000)
+
+        # Time sometimes changes between calls, so allow for that
+        expected_id_1 = f"{current_millis}-0"
+        expected_id_2 = f"{current_millis+1}-0"
+
+        should_be_true = entry_id == expected_id_1 or entry_id == expected_id_2
+        self.assertTrue(should_be_true)
+        key_len: float = len(self.storage.storage_dict["autostream"].value)
+        self.assertEqual(key_len, 1)
+
+    @patch('time.time', mock_time)
+    async def test_xadd_fully_auto_generated_id_same_time_as_previous_entry(self):
+        await self.storage.xadd("autostream", "*", {"field": "value"})
+        entry_id = await self.storage.xadd("autostream", "*", {"field2": "value2"})
+        
+        # ID should be mock time in milliseconds-1
+        expected_id = f"{int(time.time() * 1000)}-1"
+        self.assertEqual(entry_id, expected_id)
+        key_len: float = len(self.storage.storage_dict["autostream"].value)
+        self.assertEqual(key_len, 2)
+
+    async def test_xrange_basic(self):
+        await self.storage.xadd("stream_key", "0-1", {"foo": "bar"})
+        await self.storage.xadd("stream_key", "0-2", {"bar": "baz"})
+        await self.storage.xadd("stream_key", "0-3", {"baz": "foo"})
+
+        result = await self.storage.xrange("stream_key", "0-2", "0-3")
+
+        expected = [
+            [
+                "0-2",
+                [
+                    "bar", "baz",
+                ]
+            ],
+            [
+                "0-3",
+                [
+                    "baz", "foo"
+                ]
+            ]
+        ]
+
+        self.assertEqual(result, expected)
+
+    async def test_xrange_sequence_number_not_provided(self):
+        await self.storage.xadd("some_key", "1526985054069-0", {"temperature": "36", "humidity": "95"})
+        await self.storage.xadd("some_key", "1526985054079-0", {"temperature": "37", "humidity": "94"})
+        
+
+        result = await self.storage.xrange("some_key", "1526985054069", "1526985054079")
+
+        expected = [
+            [
+                "1526985054069-0",
+                [
+                    "temperature", "36",
+                    "humidity", "95"
+                ]
+            ],
+            [
+                "1526985054079-0",
+                [
+                    "temperature", "37",
+                    "humidity", "94"
+                ]
+            ]
+        ]
+
+        self.assertEqual(result, expected)
+
+    async def test_xrange_non_existent_stream(self):
+        result = await self.storage.xrange("nope", "0-0", "9999-9999")
+        self.assertEqual(result, [])
+
+    async def test_xrange_start_greater_than_end(self):
+        await self.storage.xadd("stream_key", "0-1", {"foo": "bar"})
+        await self.storage.xadd("stream_key", "0-2", {"bar": "baz"})
+
+        result = await self.storage.xrange("stream_key", "0-2", "0-1")
+        self.assertEqual(result, [])
+
+    async def test_xrange_errors_when_sequence_is_not_a_number(self):
+        await self.storage.xadd("stream_key", "0-1", {"foo": "bar"})
+        await self.storage.xadd("stream_key", "0-2", {"bar": "baz"})
+
+        with self.assertRaises(ValueError) as context:
+            await self.storage.xrange("stream_key", "0-one", "0-2")
+        self.assertIn("ERR Invalid stream ID specified as stream command argument", str(context.exception))
+
+    async def test_xrange_errors_when_milliseconds_is_not_a_number(self):
+        await self.storage.xadd("stream_key", "0-1", {"foo": "bar"})
+        await self.storage.xadd("stream_key", "0-2", {"bar": "baz"})
+
+        with self.assertRaises(ValueError) as context:
+            await self.storage.xrange("stream_key", "zero-1", "0-2")
+        self.assertIn("ERR Invalid stream ID specified as stream command argument", str(context.exception))
+
+    async def test_xrange_errors_when_sequence_is_negative(self):
+        await self.storage.xadd("stream_key", "0-1", {"foo": "bar"})
+        await self.storage.xadd("stream_key", "0-2", {"bar": "baz"})
+
+        with self.assertRaises(ValueError) as context:
+            await self.storage.xrange("stream_key", "-1-0", "0-2")
+        self.assertIn("ERR Invalid stream ID specified as stream command argument", str(context.exception))
+
+        with self.assertRaises(ValueError) as context:
+            await self.storage.xrange("stream_key", "0-1", "0--2")
+        self.assertIn("ERR Invalid stream ID specified as stream command argument", str(context.exception))
+
+    async def test_xrange_errors_with_milliseconds_is_negative(self):
+        await self.storage.xadd("stream_key", "0-1", {"foo": "bar"})
+        await self.storage.xadd("stream_key", "0-2", {"bar": "baz"})
+
+        with self.assertRaises(ValueError) as context:
+            await self.storage.xrange("stream_key", "-5-0", "0-2")
+        self.assertIn("ERR Invalid stream ID specified as stream command argument", str(context.exception))
+
+    async def test_xrange_with_count(self):
+        await self.storage.xadd("stream_key", "0-1", {"foo": "bar"})
+        await self.storage.xadd("stream_key", "0-2", {"bar": "baz"})
+        await self.storage.xadd("stream_key", "0-3", {"baz": "foo"})
+
+        result = await self.storage.xrange("stream_key", "0-1", "0-3", count=2)
+
+        expected = [
+            [
+                "0-1",
+                [
+                    "foo", "bar",
+                ]
+            ],
+            [
+                "0-2",
+                [
+                    "bar", "baz"
+                ]
+            ]
+        ]
+
+        self.assertEqual(result, expected)
+
+    async def test_xrange_with_minus_as_start(self):
+        await self.storage.xadd("stream_key", "0-1", {"foo": "bar"})
+        await self.storage.xadd("stream_key", "0-2", {"bar": "baz"})
+        await self.storage.xadd("stream_key", "0-3", {"baz": "foo"})
+
+        result = await self.storage.xrange("stream_key", "-", "0-2")
+
+        expected = [
+            [
+                "0-1",
+                [
+                    "foo", "bar",
+                ]
+            ],
+            [
+                "0-2",
+                [
+                    "bar", "baz"
+                ]
+            ]
+        ]
+
+        self.assertEqual(result, expected)
+
+    async def test_xrange_with_plus_as_end(self):
+        await self.storage.xadd("stream_key", "0-1", {"foo": "bar"})
+        await self.storage.xadd("stream_key", "0-2", {"bar": "baz"})
+        await self.storage.xadd("stream_key", "0-3", {"baz": "foo"})
+
+        result = await self.storage.xrange("stream_key", "0-2", "+")
+
+        expected = [
+            [
+                "0-2",
+                [
+                    "bar", "baz",
+                ]
+            ],
+            [
+                "0-3",
+                [
+                    "baz", "foo"
+                ]
+            ]
+        ]
+
+        self.assertEqual(result, expected)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,16 +1,17 @@
 import unittest
 
 from app.format_response import (
-    format_simple_success,
+    format_simple_string,
     format_bulk_string_success,
     format_integer_success,
     format_resp_array,
     format_null_bulk_string,
+    format_simple_error,
 )
 
 class TestFormatResponse(unittest.IsolatedAsyncioTestCase):
     def test_format_simple_success(self):
-        response: bytes = format_simple_success("PONG")
+        response: bytes = format_simple_string("PONG")
         self.assertEqual(response, b"+PONG\r\n")
 
     def test_format_bulk_success(self):
@@ -34,6 +35,10 @@ class TestFormatResponse(unittest.IsolatedAsyncioTestCase):
     def test_format_null_bulk_string(self):
         response: bytes = format_null_bulk_string()
         self.assertEqual(response, b"$-1\r\n")
+
+    def test_format_error(self):
+        response: bytes = format_simple_error("ERR unknown command 'foobar'")
+        self.assertEqual(response, b"-ERR unknown command 'foobar'\r\n")
 
 if __name__ == "__main__":
     unittest.main()
