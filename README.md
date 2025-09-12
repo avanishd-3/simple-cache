@@ -1,60 +1,56 @@
-[![progress-banner](https://backend.codecrafters.io/progress/redis/d6d3cf94-bd92-4c38-9f21-6c17893aa3a7)](https://app.codecrafters.io/users/codecrafters-bot?r=2qF)
+# simple-cache
 
-This is a starting point for Python solutions to the
-["Build Your Own Redis" Challenge](https://codecrafters.io/challenges/redis).
+Non-persistent, minimal key-value store inspired by Redis. Uses Python asyncio event loop to manage clients.
 
-In this challenge, you'll build a toy Redis clone that's capable of handling
-basic commands like `PING`, `SET` and `GET`. Along the way we'll learn about
-event loops, the Redis protocol and more.
+simple-cache uses RESP 2, so using Redis clients like redis-cli and language-specific Redis SDKs should work, though I've only tested with redis-cli.
 
-**Note**: If you're viewing this repo on GitHub, head over to
-[codecrafters.io](https://codecrafters.io) to try the challenge.
+The supported commands and their differences compared to the Redis versions are outlined below.
 
-# Passing the first stage
+## Supported Commands
 
-The entry point for your Redis implementation is in `app/main.py`. Study and
-uncomment the relevant code, and push your changes to pass the first stage:
+<details>
 
-```sh
-git commit -am "pass 1st stage" # any msg
-git push origin master
-```
+   <summary>Basic commands</summary>
 
-That's all!
 
-# Stage 2 & beyond
+   | Command | Deviation from Redis                      |
+   | ------- | ----------------------------------------- |
+   | PING    | Optional argument message not supported   |
+   | ECHO    | None                                      |
+   | TYPE    | Only supports strings, lists, and streams |
+</details>
 
-Note: This section is for stages 2 and beyond.
+<details>
 
-1. Ensure you have `python (3.13)` installed locally
-1. Run `./your_program.sh` to run your Redis server, which is implemented in
-   `app/main.py`.
-1. Commit your changes and run `git push origin master` to submit your solution
-   to CodeCrafters. Test output will be streamed to your terminal.
+   <summary>String commands</summary>
 
-# Troubleshooting
+   | Command | Deviation from Redis                                                                                |
+   | ------- | --------------------------------------------------------------------------------------------------- |
+   | SET     | These optional arguments are not supported:<br><br>EX<br>EXAT<br>PXAT<br>NX<br>XX<br>KEEPTTL<br>GET |
+   | GET     | None                                                                                                |
+   
+</details>
 
-## module `socket` has no attribute `create_server`
+<details>
 
-When running your server locally, you might see an error like this:
+   <summary>List commands</summary>
 
-```
-Traceback (most recent call last):
-  File "/.../python3.7/runpy.py", line 193, in _run_module_as_main
-    "__main__", mod_spec)
-  File "/.../python3.7/runpy.py", line 85, in _run_code
-    exec(code, run_globals)
-  File "/app/app/main.py", line 11, in <module>
-    main()
-  File "/app/app/main.py", line 6, in main
-    s = socket.create_server(("localhost", 6379), reuse_port=True)
-AttributeError: module 'socket' has no attribute 'create_server'
-```
+   | Command | Deviation from Redis                                  |
+   | ------- | ----------------------------------------------------- |
+   | RPUSH   | None                                                  |
+   | LRANGE  | None                                                  |
+   | LPUSH   | None                                                  |
+   | LLEN    | None                                                  |
+   | LPOP    | None                                                  |
+   | BLPOP   | Does not support blocking on multiple lists at a time |
+</details>
 
-This is because `socket.create_server` was introduced in Python 3.8, and you
-might be running an older version.
+<details>
 
-You can fix this by installing Python 3.8 locally and using that.
+   <summary>Stream commands</summary>
 
-If you'd like to use a different version of Python, change the `language_pack`
-value in `codecrafters.yml`.
+   | Command | Deviation from Redis            |
+   | ------- | ------------------------------- |
+   | XADD    | No optional arguments supported |
+   | XRANGE  | None                            |
+</details>
