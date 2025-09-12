@@ -1,0 +1,146 @@
+import unittest
+import asyncio
+
+from app.main import main
+
+def _write_and_drain(writer: asyncio.StreamWriter, data: bytes):
+    """
+    Helper function to write data to the writer and drain it immediately.
+    """
+    writer.write(data)
+    return writer.drain()
+
+class TestServer(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.server_port = 6379
+        # Start the server
+        self.server_task = asyncio.create_task(main())
+        await asyncio.sleep(0.1)  # Give the server a moment to start (will get connect call failed without this)
+
+        self.reader, self.writer = await asyncio.open_connection('localhost', self.server_port)
+
+
+    async def asyncTearDown(self): # Cancel the server task after tests 
+        self.server_task.cancel()
+
+        # See: https://docs.python.org/3/library/asyncio-stream.html#examples
+        self.writer.close()
+        await self.writer.wait_closed()
+
+
+class BasicCommandsTests(TestServer):
+    """
+    Test PING, ECHO, SET, GET commands
+    """
+
+    async def test_single_ping(self):
+        await _write_and_drain(self.writer, b'PING')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'+PONG\r\n')
+
+    async def test_multiple_pings(self):
+        for _ in range(5):
+            await _write_and_drain(self.writer, b'PING')
+            response = await self.reader.read(100)
+            self.assertEqual(response, b'+PONG\r\n')
+
+    async def test_multiple_clients(self):
+        clients = []
+        for _ in range(3):
+            reader, writer = await asyncio.open_connection('localhost', self.server_port)
+            clients.append((reader, writer))
+
+        for reader, writer in clients:
+            await _write_and_drain(writer, b'PING')
+
+        for reader, writer in clients:
+            response = await reader.read(100)
+            self.assertEqual(response, b'+PONG\r\n')
+            writer.close()
+
+    async def test_echo(self):
+        await _write_and_drain(self.writer, b'PING')
+        response = await self.reader.read(100)
+        await _write_and_drain(self.writer, b'*2\r\n$4\r\nECHO\r\n$3\r\nhey\r\n')
+        response = await self.reader.read(300)
+        self.assertEqual(response, b'$3\r\nhey\r\n')
+
+    async def test_non_uppercase_commands_work(self):
+        await _write_and_drain(self.writer, b'*1\r\n$4\r\nping\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'+PONG\r\n')
+
+    async def test_set(self):
+        await _write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'+OK\r\n')
+
+    async def test_get(self):
+        await _write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
+        _ = await self.reader.read(100)
+        await _write_and_drain(self.writer, b'*2\r\n$3\r\nGET\r\n$3\r\nkey\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'$5\r\nvalue\r\n')
+
+    async def test_get_key_not_found(self):
+        await _write_and_drain(self.writer, b'*2\r\n$3\r\nGET\r\n$3\r\nnon_existing_key\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'$-1\r\n')
+
+    async def test_set_with_expiry(self):
+        await _write_and_drain(self.writer, b'*5\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n$2\r\nPX\r\n$3\r\n100\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'+OK\r\n')
+        await asyncio.sleep(0.1)  # Wait for key to expire
+        await _write_and_drain(self.writer, b'*2\r\n$3\r\nGET\r\n$3\r\nkey\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'$-1\r\n')  # Key should be expired
+
+class ListTests(TestServer):
+    """
+    Test RPUSH command
+
+
+    Note: The server may not be properly cleaning up between tests, so lists created in one test may persist into another.
+          Create unique list names for each test to avoid interference.
+    """
+
+    async def test_create_list_rpush(self):
+        await _write_and_drain(self.writer, b'*4\r\n$5\r\nRPUSH\r\n$4\r\nlist\r\n$5\r\nvalue\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':1\r\n')
+
+    async def test_rpush_append_single_element(self):
+        await _write_and_drain(self.writer, b'*4\r\n$5\r\nRPUSH\r\n$5\r\nlist2\r\n$5\r\nvalue1\r\n')
+        _ = await self.reader.read(100)
+        await _write_and_drain(self.writer, b'*4\r\n$5\r\nRPUSH\r\n$5\r\nlist2\r\n$5\r\nvalue2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':2\r\n')
+
+    async def test_rpush_with_multiple_elements_in_single_command(self):
+        await _write_and_drain(self.writer, b'*6\r\n$5\r\nRPUSH\r\n$5\r\nlist3\r\n$5\r\nvalue1\r\n$5\r\nvalue2\r\n$5\r\nvalue3\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':3\r\n')
+
+    async def test_lrange_positive_indices(self):
+        await _write_and_drain(self.writer, b'*6\r\n$5\r\nRPUSH\r\n$8\r\nlist_key\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\nc\r\n$1\r\nd\r\n$1\r\ne\r\n')
+        _ = await self.reader.read(100)
+        await _write_and_drain(self.writer, b'*4\r\n$6\r\nLRANGE\r\n$8\r\nlist_key\r\n$1\r\n0\r\n$1\r\n2\r\n')
+        response = await self.reader.read(300)
+        self.assertEqual(response, b'*3\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\nc\r\n')
+        await _write_and_drain(self.writer, b'*4\r\n$6\r\nLRANGE\r\n$8\r\nlist_key\r\n$1\r\n2\r\n$1\r\n4\r\n')
+        response = await self.reader.read(300)
+        self.assertEqual(response, b'*3\r\n$1\r\nc\r\n$1\r\nd\r\n$1\r\ne\r\n')
+
+    async def test_lrange_negative_indices(self):
+        await _write_and_drain(self.writer, b'*6\r\n$5\r\nRPUSH\r\n$9\r\nlist_key2\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\nc\r\n$1\r\nd\r\n$1\r\ne\r\n')
+        _ = await self.reader.read(100)
+        await _write_and_drain(self.writer, b'*4\r\n$6\r\nLRANGE\r\n$9\r\nlist_key2\r\n$1\r\n-3\r\n$1\r\n-1\r\n')
+        response = await self.reader.read(300)
+        self.assertEqual(response, b'*3\r\n$1\r\nc\r\n$1\r\nd\r\n$1\r\ne\r\n')
+        await _write_and_drain(self.writer, b'*4\r\n$6\r\nLRANGE\r\n$9\r\nlist_key2\r\n$1\r\n-2\r\n$1\r\n-1\r\n')
+
+
+
+if __name__ == "__main__":
+    unittest.main()
