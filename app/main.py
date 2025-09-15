@@ -17,13 +17,15 @@ from .format_response import (
 
 from .data_storage import DataStorage
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
 # Data
 storage_data: DataStorage = DataStorage()
 
 async def redis_parser(data: bytes) -> list[str]:
     # TODO: Make actual parser
+
+    logging.debug(f"Raw data received: {data}")
 
     command_list = data.decode().strip().split("\r\n")
 

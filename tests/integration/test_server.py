@@ -140,6 +140,17 @@ class ListTests(TestServer):
         self.assertEqual(response, b'*3\r\n$1\r\nc\r\n$1\r\nd\r\n$1\r\ne\r\n')
         await _write_and_drain(self.writer, b'*4\r\n$6\r\nLRANGE\r\n$9\r\nlist_key2\r\n$1\r\n-2\r\n$1\r\n-1\r\n')
 
+    async def test_lpush(self):
+        await _write_and_drain(self.writer, b'*4\r\n$5\r\nLPUSH\r\n$6\r\nmylist\r\n$1\r\nc\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':1\r\n')
+        await _write_and_drain(self.writer, b'*4\r\n$5\r\nLPUSH\r\n$6\r\nmylist\r\n$1\r\nb\r\n$1\r\na\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':3\r\n')
+        await _write_and_drain(self.writer, b'*4\r\n$6\r\nlrange\r\n$6\r\nmylist\r\n$1\r\n0\r\n$2\r\n-1\r\n')
+        response = await self.reader.read(300)
+        self.assertEqual(response, b'*3\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\nc\r\n')
+
 
 
 if __name__ == "__main__":
