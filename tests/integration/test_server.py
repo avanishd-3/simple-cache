@@ -158,6 +158,38 @@ class ListTests(TestServer):
         response = await self.reader.read(100)
         self.assertEqual(response, b':3\r\n')
 
+    async def test_lpop_single_element(self):
+        await _write_and_drain(self.writer, b'*4\r\n$5\r\nRPUSH\r\n$7\r\nmylist3\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\nc\r\n')
+        _ = await self.reader.read(100)
+        await _write_and_drain(self.writer, b'*3\r\n$4\r\nLPOP\r\n$7\r\nmylist3\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'$1\r\na\r\n')
+        await _write_and_drain(self.writer, b'*3\r\n$5\r\nLLEN\r\n$7\r\nmylist3\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':2\r\n')
+
+    async def test_lpop_list_does_not_exist(self):
+        await _write_and_drain(self.writer, b'*3\r\n$4\r\nLPOP\r\n$10\r\nnonexistent\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'$-1\r\n')
+
+    async def test_lpop_empty_list(self):
+        await _write_and_drain(self.writer, b'*4\r\n$5\r\nRPUSH\r\n$9\r\nemptylist\r\n$0\r\n\r\n')
+        _ = await self.reader.read(100)
+        await _write_and_drain(self.writer, b'*3\r\n$4\r\nLPOP\r\n$9\r\nemptylist\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'$-1\r\n')
+
+    async def test_lpop_multiple_elements_single_command(self):
+        await _write_and_drain(self.writer, b'*4\r\n$5\r\nRPUSH\r\n$8\r\nmylist4\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\nc\r\n')
+        _ = await self.reader.read(100)
+        await _write_and_drain(self.writer, b'*4\r\n$4\r\nLPOP\r\n$8\r\nmylist4\r\n$2\r\n2\r\n')
+        response = await self.reader.read(300)
+        self.assertEqual(response, b'*2\r\n$1\r\na\r\n$1\r\nb\r\n')
+        await _write_and_drain(self.writer, b'*3\r\n$5\r\nLLEN\r\n$8\r\nmylist4\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':1\r\n')
+
 
 
 if __name__ == "__main__":
