@@ -151,6 +151,13 @@ class ListTests(TestServer):
         response = await self.reader.read(300)
         self.assertEqual(response, b'*3\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\nc\r\n')
 
+    async def test_llen(self):
+        await _write_and_drain(self.writer, b'*4\r\n$5\r\nRPUSH\r\n$7\r\nmylist2\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\nc\r\n')
+        _ = await self.reader.read(100)
+        await _write_and_drain(self.writer, b'*3\r\n$5\r\nLLEN\r\n$7\r\nmylist2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':3\r\n')
+
 
 
 if __name__ == "__main__":
