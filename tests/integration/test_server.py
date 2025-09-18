@@ -190,6 +190,22 @@ class ListTests(TestServer):
         response = await self.reader.read(100)
         self.assertEqual(response, b':1\r\n')
 
+    async def test_blpop_with_timeout_simple(self):
+        await _write_and_drain(self.writer, b'*3\r\n$5\r\nBLPOP\r\n$7\r\nmylist5\r\n$1\r\n1\r\n')
+        
+        # Need to open new connection to rpush to the list since blpop is blocking
+        new_reader, new_writer = await asyncio.open_connection('localhost', self.server_port)
+        await _write_and_drain(new_writer, b'*4\r\n$5\r\nRPUSH\r\n$7\r\nmylist5\r\n$3\r\nfoo\r\n')
+        int_response = await new_reader.read(100)
+        self.assertEqual(int_response, b':1\r\n')
+
+        # Check response from blpop client
+        response = await self.reader.read(300)
+        self.assertEqual(response, b'*2\r\n$7\r\nmylist5\r\n$3\r\nfoo\r\n')
+        
+        # Clean up
+        new_writer.close()
+        await new_writer.wait_closed()
 
 
 if __name__ == "__main__":
