@@ -17,7 +17,7 @@ from .format_response import (
 
 from .data_storage import DataStorage
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 # Data
 storage_data: DataStorage = DataStorage()
