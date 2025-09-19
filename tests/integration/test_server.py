@@ -233,6 +233,31 @@ class ListTests(TestServer):
         new_writer.close()
         await new_writer.wait_closed()
 
+class StreamTests(TestServer):
+    """
+    Test XADD and XRANGE commands
+
+    Note: The server may not be properly cleaning up between tests, so streams created in one test may persist into another.
+          Create unique stream names for each test to avoid interference.
+    """
+
+    async def test_xadd(self):
+        await _write_and_drain(self.writer, b'*5\r\n$4\r\nXADD\r\n$9\r\ntest_xadd\r\n$3\r\n0-1\r\n$4\r\ntemp\r\n$2\r\n36\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'$3\r\n0-1\r\n')
+
+    async def test_xrange(self):
+        await _write_and_drain(self.writer, b'*7\r\n$4\r\nXADD\r\n$11\r\ntest_xrange\r\n$15\r\n1526985054069-0\r\n$11\r\ntemperature\r\n$2\r\n36\r\n$8\r\nhumidity\r\n$2\r\n95\r\n')
+        _ = await self.reader.read(100)
+        await _write_and_drain(self.writer, b'*7\r\n$4\r\nXADD\r\n$11\r\ntest_xrange\r\n$15\r\n1526985054079-0\r\n$11\r\ntemperature\r\n$2\r\n37\r\n$8\r\nhumidity\r\n$2\r\n94\r\n')
+        _ = await self.reader.read(100)
+        await _write_and_drain(self.writer, b'*4\r\n$6\r\nXRANGE\r\n$11\r\ntest_xrange\r\n$13\r\n1526985054069\r\n$13\r\n1526985054079\r\n')
+        response = await self.reader.read(500)
+        
+        should_be = b'*2\r\n*2\r\n$15\r\n1526985054069-0\r\n*4\r\n$11\r\ntemperature\r\n$2\r\n36\r\n$8\r\nhumidity\r\n$2\r\n95\r\n*2\r\n$15\r\n1526985054079-0\r\n*4\r\n$11\r\ntemperature\r\n$2\r\n37\r\n$8\r\nhumidity\r\n$2\r\n94\r\n'
+
+        self.assertEqual(response, should_be)
+
 
 if __name__ == "__main__":
     unittest.main()
