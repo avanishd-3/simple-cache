@@ -96,6 +96,32 @@ class BasicCommandsTests(TestServer):
         response = await self.reader.read(100)
         self.assertEqual(response, b'$-1\r\n')  # Key should be expired
 
+    async def test_type_string(self):
+        await _write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
+        _ = await self.reader.read(100)
+        await _write_and_drain(self.writer, b'*2\r\n$4\r\nTYPE\r\n$3\r\nkey\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'+string\r\n')
+
+    async def test_type_key_not_found(self):
+        await _write_and_drain(self.writer, b'*2\r\n$4\r\nTYPE\r\n$3\r\nnon_existing_key\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'+none\r\n')
+
+    async def test_type_list(self):
+        await _write_and_drain(self.writer, b'*4\r\n$5\r\nRPUSH\r\n$4\r\nshould_be_list\r\n$5\r\nvalue\r\n')
+        _ = await self.reader.read(100)
+        await _write_and_drain(self.writer, b'*2\r\n$4\r\nTYPE\r\n$4\r\nshould_be_list\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'+list\r\n')
+
+    async def test_type_stream(self):
+        await _write_and_drain(self.writer, b'*5\r\n$4\r\nXADD\r\n$16\r\nshould_be_stream\r\n$3\r\n0-1\r\n$4\r\ntemp\r\n$2\r\n36\r\n')
+        _ = await self.reader.read(100)
+        await _write_and_drain(self.writer, b'*2\r\n$4\r\nTYPE\r\n$16\r\nshould_be_stream\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'+stream\r\n')
+
 class ListTests(TestServer):
     """
     Test RPUSH command
