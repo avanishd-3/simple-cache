@@ -11,9 +11,19 @@ from typing import Type
 mock_time = Mock()
 mock_time.return_value = 1234567890.0
 
-class TestDataStorage(unittest.IsolatedAsyncioTestCase):
+
+class BaseDataStorageTest(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.storage = DataStorage()
+
+    async def asyncTearDown(self):
+        await self.storage.flushdb_async()
+
+
+class BasicDataStorageTests(BaseDataStorageTest):
+    """
+    SET, GET, TYPE tests
+    """
 
     async def test_set_and_get(self):
         await self.storage.set("foo", "bar")
@@ -50,6 +60,12 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
         await self.storage.xadd("mystream", "1-0", {"field1": "value1"})
         key_type = await self.storage.key_type("mystream")
         self.assertEqual(key_type, Type[dict])
+
+
+class ListDataStorageTests(BaseDataStorageTest):
+    """
+    RPUSH, LPUSH, LRANGE, LLEN, LPOP, BLPOP tests
+    """
 
     async def test_rpush_creates_list_if_it_doesnt_exist(self):
         length = await self.storage.rpush("numbers", [1, 2])
@@ -208,6 +224,8 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
         key_len: float = len(self.storage.storage_dict["mystream"].value)
         self.assertEqual(key_len, 1)
 
+
+class StreamDataStorageTests(BaseDataStorageTest):
     async def test_xadd_appends_to_existing_stream(self):
         await self.storage.xadd("mystream", "1-0", {"field1": "value1"})
         entry_id = await self.storage.xadd("mystream", "1-1", {"field2": "value2"})
@@ -280,8 +298,6 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
         key_len: float = len(self.storage.storage_dict["autostream"].value)
         self.assertEqual(key_len, 2)
 
-    # Not testing where a time part already exists in the stream and the sequence number is incremented
-    # since this requires sending 2 commands in the same millisecond
     async def test_xadd_fully_auto_generated_id_new_stream(self):
         entry_id = await self.storage.xadd("autostream", "*", {"field": "value"})
         # ID should be current time in milliseconds-0
@@ -475,6 +491,23 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
         ]
 
         self.assertEqual(result, expected)
+
+
+class OtherDataStorageTests(BaseDataStorageTest):
+    """
+    FLUSHDB tests
+    """
+    
+    async def test_flushdb_sync(self):
+        await self.storage.set("key1", "value1")
+        self.storage.flushdb_sync()
+        self.assertEqual(len(self.storage.storage_dict), 0)
+
+
+    async def test_flushdb_async(self):
+        await self.storage.set("key2", "value2")
+        await self.storage.flushdb_async()
+        self.assertEqual(len(self.storage.storage_dict), 0)
 
 
 if __name__ == "__main__":

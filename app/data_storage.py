@@ -510,3 +510,18 @@ class DataStorage():
             else:
                 logging.info(f"Key not found or not a stream: {key}")
                 return []
+            
+    async def flushdb_async(self) -> None:
+        """
+        Remove all keys from the current database.
+        """
+        async with self.lock:
+            self.storage_dict.clear()
+            logging.info("Flushed all data from the database (async)")
+
+    def flushdb_sync(self) -> None:
+        """
+        Synchronous version of flushdb
+        """
+        self.storage_dict.clear()
+        logging.info("Flushed all data from the database (sync)")
