@@ -62,5 +62,5 @@ The supported commands and their differences compared to the Redis versions are 
 
    | Command | Deviation from Redis |
    | ------- | ---------------------|
-   | FLUSHDB | None ----------------|
+   | FLUSHDB | None                 |
 </details>
