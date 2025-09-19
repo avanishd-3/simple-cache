@@ -280,8 +280,6 @@ class TestDataStorage(unittest.IsolatedAsyncioTestCase):
         key_len: float = len(self.storage.storage_dict["autostream"].value)
         self.assertEqual(key_len, 2)
 
-    # Not testing where a time part already exists in the stream and the sequence number is incremented
-    # since this requires sending 2 commands in the same millisecond
     async def test_xadd_fully_auto_generated_id_new_stream(self):
         entry_id = await self.storage.xadd("autostream", "*", {"field": "value"})
         # ID should be current time in milliseconds-0
