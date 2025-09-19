@@ -54,3 +54,13 @@ The supported commands and their differences compared to the Redis versions are 
    | XADD    | No optional arguments supported |
    | XRANGE  | None                            |
 </details>
+
+<details>
+
+   <summary>Other commands</summary>
+
+
+   | Command | Deviation from Redis |
+   | ------- | ---------------------|
+   | FLUSHDB | None ----------------|
+</details>

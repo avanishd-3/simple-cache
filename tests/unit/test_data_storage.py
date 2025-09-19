@@ -11,12 +11,14 @@ from typing import Type
 mock_time = Mock()
 mock_time.return_value = 1234567890.0
 
+
 class BaseDataStorageTest(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.storage = DataStorage()
 
     async def asyncTearDown(self):
         await self.storage.flushdb_async()
+
 
 class BasicDataStorageTests(BaseDataStorageTest):
     """
@@ -58,6 +60,7 @@ class BasicDataStorageTests(BaseDataStorageTest):
         await self.storage.xadd("mystream", "1-0", {"field1": "value1"})
         key_type = await self.storage.key_type("mystream")
         self.assertEqual(key_type, Type[dict])
+
 
 class ListDataStorageTests(BaseDataStorageTest):
     """
@@ -220,6 +223,7 @@ class ListDataStorageTests(BaseDataStorageTest):
         self.assertEqual(entry_id, "1-0")
         key_len: float = len(self.storage.storage_dict["mystream"].value)
         self.assertEqual(key_len, 1)
+
 
 class StreamDataStorageTests(BaseDataStorageTest):
     async def test_xadd_appends_to_existing_stream(self):
@@ -487,6 +491,23 @@ class StreamDataStorageTests(BaseDataStorageTest):
         ]
 
         self.assertEqual(result, expected)
+
+
+class OtherDataStorageTests(BaseDataStorageTest):
+    """
+    FLUSHDB tests
+    """
+    
+    async def test_flushdb_sync(self):
+        await self.storage.set("key1", "value1")
+        self.storage.flushdb_sync()
+        self.assertEqual(len(self.storage.storage_dict), 0)
+
+
+    async def test_flushdb_async(self):
+        await self.storage.set("key2", "value2")
+        await self.storage.flushdb_async()
+        self.assertEqual(len(self.storage.storage_dict), 0)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@ import logging
 import time
 
 # Type annotations
-from typing import Type
+from typing import Type, Literal
 
 # Internal imports
 from .format_response import (
@@ -349,6 +349,24 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                         i += 6
                     else:
                         i += 4
+
+                case "FLUSHDB":
+                    # Flushing is sync by default for Redis, so copying this behaviour
+                    method: Literal["SYNC", "ASYNC"] = command_list[i + 1] if i + 1 < command_list_len else ""
+
+                    logging.info(f"FLUSHDB: method {method}")
+                    if method == "ASYNC":
+                        await storage_data.flushdb_async()
+                    else:
+                        storage_data.flushdb_sync()
+                    writer.write(format_simple_string("OK"))
+                    await writer.drain()  # Flush write buffer
+
+                    # Move to next command
+                    if method == "":  # No method specified
+                        i += 1
+                    else:
+                        i += 2
 
                 case _:
                     # Keep this for now, change/remove when done

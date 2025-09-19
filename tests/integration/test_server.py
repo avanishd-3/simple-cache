@@ -10,7 +10,13 @@ def _write_and_drain(writer: asyncio.StreamWriter, data: bytes):
     writer.write(data)
     return writer.drain()
 
+
 class TestServer(unittest.IsolatedAsyncioTestCase):
+    """
+    Base class for server tests.
+
+    Ensures a fresh db for each test and handles server startup/shutdown.
+    """
     async def asyncSetUp(self):
         self.server_port = 6379
         # Start the server
@@ -20,7 +26,12 @@ class TestServer(unittest.IsolatedAsyncioTestCase):
         self.reader, self.writer = await asyncio.open_connection('localhost', self.server_port)
 
 
-    async def asyncTearDown(self): # Cancel the server task after tests 
+    async def asyncTearDown(self):
+
+        # Flush the db to ensure clean state
+        await _write_and_drain(self.writer, b'*1\r\n$5\r\nFLUSHDB\r\n')
+
+        # Cancel server tasks so no interference between tests
         self.server_task.cancel()
 
         # See: https://docs.python.org/3/library/asyncio-stream.html#examples
@@ -30,7 +41,7 @@ class TestServer(unittest.IsolatedAsyncioTestCase):
 
 class BasicCommandsTests(TestServer):
     """
-    Test PING, ECHO, SET, GET commands
+    Test PING, ECHO, SET, GET, TYPE commands
     """
 
     async def test_single_ping(self):
@@ -122,13 +133,10 @@ class BasicCommandsTests(TestServer):
         response = await self.reader.read(100)
         self.assertEqual(response, b'+stream\r\n')
 
+
 class ListTests(TestServer):
     """
-    Test RPUSH command
-
-
-    Note: The server may not be properly cleaning up between tests, so lists created in one test may persist into another.
-          Create unique list names for each test to avoid interference.
+    Test RPUSH, LPUSH, LRANGE, LLEN, LPOP, BLPOP commands
     """
 
     async def test_create_list_rpush(self):
@@ -137,14 +145,14 @@ class ListTests(TestServer):
         self.assertEqual(response, b':1\r\n')
 
     async def test_rpush_append_single_element(self):
-        await _write_and_drain(self.writer, b'*4\r\n$5\r\nRPUSH\r\n$5\r\nlist2\r\n$5\r\nvalue1\r\n')
+        await _write_and_drain(self.writer, b'*4\r\n$5\r\nRPUSH\r\n$4\r\nlist\r\n$5\r\nvalue1\r\n')
         _ = await self.reader.read(100)
-        await _write_and_drain(self.writer, b'*4\r\n$5\r\nRPUSH\r\n$5\r\nlist2\r\n$5\r\nvalue2\r\n')
+        await _write_and_drain(self.writer, b'*4\r\n$5\r\nRPUSH\r\n$4\r\nlist\r\n$5\r\nvalue2\r\n')
         response = await self.reader.read(100)
         self.assertEqual(response, b':2\r\n')
 
     async def test_rpush_with_multiple_elements_in_single_command(self):
-        await _write_and_drain(self.writer, b'*6\r\n$5\r\nRPUSH\r\n$5\r\nlist3\r\n$5\r\nvalue1\r\n$5\r\nvalue2\r\n$5\r\nvalue3\r\n')
+        await _write_and_drain(self.writer, b'*6\r\n$5\r\nRPUSH\r\n$4\r\nlist\r\n$5\r\nvalue1\r\n$5\r\nvalue2\r\n$5\r\nvalue3\r\n')
         response = await self.reader.read(100)
         self.assertEqual(response, b':3\r\n')
 
@@ -159,12 +167,12 @@ class ListTests(TestServer):
         self.assertEqual(response, b'*3\r\n$1\r\nc\r\n$1\r\nd\r\n$1\r\ne\r\n')
 
     async def test_lrange_negative_indices(self):
-        await _write_and_drain(self.writer, b'*6\r\n$5\r\nRPUSH\r\n$9\r\nlist_key2\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\nc\r\n$1\r\nd\r\n$1\r\ne\r\n')
+        await _write_and_drain(self.writer, b'*6\r\n$5\r\nRPUSH\r\n$8\r\nlist_key\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\nc\r\n$1\r\nd\r\n$1\r\ne\r\n')
         _ = await self.reader.read(100)
-        await _write_and_drain(self.writer, b'*4\r\n$6\r\nLRANGE\r\n$9\r\nlist_key2\r\n$1\r\n-3\r\n$1\r\n-1\r\n')
+        await _write_and_drain(self.writer, b'*4\r\n$6\r\nLRANGE\r\n$8\r\nlist_key\r\n$1\r\n-3\r\n$1\r\n-1\r\n')
         response = await self.reader.read(300)
         self.assertEqual(response, b'*3\r\n$1\r\nc\r\n$1\r\nd\r\n$1\r\ne\r\n')
-        await _write_and_drain(self.writer, b'*4\r\n$6\r\nLRANGE\r\n$9\r\nlist_key2\r\n$1\r\n-2\r\n$1\r\n-1\r\n')
+        await _write_and_drain(self.writer, b'*4\r\n$6\r\nLRANGE\r\n$8\r\nlist_key\r\n$1\r\n-2\r\n$1\r\n-1\r\n')
 
     async def test_lpush(self):
         await _write_and_drain(self.writer, b'*4\r\n$5\r\nLPUSH\r\n$6\r\nmylist\r\n$1\r\nc\r\n')
@@ -178,19 +186,19 @@ class ListTests(TestServer):
         self.assertEqual(response, b'*3\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\nc\r\n')
 
     async def test_llen(self):
-        await _write_and_drain(self.writer, b'*4\r\n$5\r\nRPUSH\r\n$7\r\nmylist2\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\nc\r\n')
+        await _write_and_drain(self.writer, b'*4\r\n$5\r\nRPUSH\r\n$6\r\nmylist\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\nc\r\n')
         _ = await self.reader.read(100)
-        await _write_and_drain(self.writer, b'*3\r\n$5\r\nLLEN\r\n$7\r\nmylist2\r\n')
+        await _write_and_drain(self.writer, b'*3\r\n$5\r\nLLEN\r\n$6\r\nmylist\r\n')
         response = await self.reader.read(100)
         self.assertEqual(response, b':3\r\n')
 
     async def test_lpop_single_element(self):
-        await _write_and_drain(self.writer, b'*4\r\n$5\r\nRPUSH\r\n$7\r\nmylist3\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\nc\r\n')
+        await _write_and_drain(self.writer, b'*4\r\n$5\r\nRPUSH\r\n$6\r\nmylist\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\nc\r\n')
         _ = await self.reader.read(100)
-        await _write_and_drain(self.writer, b'*3\r\n$4\r\nLPOP\r\n$7\r\nmylist3\r\n')
+        await _write_and_drain(self.writer, b'*3\r\n$4\r\nLPOP\r\n$6\r\nmylist\r\n')
         response = await self.reader.read(100)
         self.assertEqual(response, b'$1\r\na\r\n')
-        await _write_and_drain(self.writer, b'*3\r\n$5\r\nLLEN\r\n$7\r\nmylist3\r\n')
+        await _write_and_drain(self.writer, b'*3\r\n$5\r\nLLEN\r\n$6\r\nmylist\r\n')
         response = await self.reader.read(100)
         self.assertEqual(response, b':2\r\n')
 
@@ -207,38 +215,36 @@ class ListTests(TestServer):
         self.assertEqual(response, b'$-1\r\n')
 
     async def test_lpop_multiple_elements_single_command(self):
-        await _write_and_drain(self.writer, b'*4\r\n$5\r\nRPUSH\r\n$8\r\nmylist4\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\nc\r\n')
+        await _write_and_drain(self.writer, b'*4\r\n$5\r\nRPUSH\r\n$6\r\nmylist\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\nc\r\n')
         _ = await self.reader.read(100)
-        await _write_and_drain(self.writer, b'*4\r\n$4\r\nLPOP\r\n$8\r\nmylist4\r\n$2\r\n2\r\n')
+        await _write_and_drain(self.writer, b'*4\r\n$4\r\nLPOP\r\n$6\r\nmylist\r\n$2\r\n2\r\n')
         response = await self.reader.read(300)
         self.assertEqual(response, b'*2\r\n$1\r\na\r\n$1\r\nb\r\n')
-        await _write_and_drain(self.writer, b'*3\r\n$5\r\nLLEN\r\n$8\r\nmylist4\r\n')
+        await _write_and_drain(self.writer, b'*3\r\n$5\r\nLLEN\r\n$6\r\nmylist\r\n')
         response = await self.reader.read(100)
         self.assertEqual(response, b':1\r\n')
 
     async def test_blpop_with_timeout_simple(self):
-        await _write_and_drain(self.writer, b'*3\r\n$5\r\nBLPOP\r\n$7\r\nmylist5\r\n$1\r\n1\r\n')
+        await _write_and_drain(self.writer, b'*3\r\n$5\r\nBLPOP\r\n$6\r\nmylist\r\n$1\r\n1\r\n')
         
         # Need to open new connection to rpush to the list since blpop is blocking
         new_reader, new_writer = await asyncio.open_connection('localhost', self.server_port)
-        await _write_and_drain(new_writer, b'*4\r\n$5\r\nRPUSH\r\n$7\r\nmylist5\r\n$3\r\nfoo\r\n')
+        await _write_and_drain(new_writer, b'*4\r\n$5\r\nRPUSH\r\n$6\r\nmylist\r\n$3\r\nfoo\r\n')
         int_response = await new_reader.read(100)
         self.assertEqual(int_response, b':1\r\n')
 
         # Check response from blpop client
         response = await self.reader.read(300)
-        self.assertEqual(response, b'*2\r\n$7\r\nmylist5\r\n$3\r\nfoo\r\n')
+        self.assertEqual(response, b'*2\r\n$6\r\nmylist\r\n$3\r\nfoo\r\n')
         
         # Clean up
         new_writer.close()
         await new_writer.wait_closed()
 
+
 class StreamTests(TestServer):
     """
     Test XADD and XRANGE commands
-
-    Note: The server may not be properly cleaning up between tests, so streams created in one test may persist into another.
-          Create unique stream names for each test to avoid interference.
     """
 
     async def test_xadd(self):
@@ -257,6 +263,45 @@ class StreamTests(TestServer):
         should_be = b'*2\r\n*2\r\n$15\r\n1526985054069-0\r\n*4\r\n$11\r\ntemperature\r\n$2\r\n36\r\n$8\r\nhumidity\r\n$2\r\n95\r\n*2\r\n$15\r\n1526985054079-0\r\n*4\r\n$11\r\ntemperature\r\n$2\r\n37\r\n$8\r\nhumidity\r\n$2\r\n94\r\n'
 
         self.assertEqual(response, should_be)
+
+
+class OtherCommandsTests(TestServer):
+    """
+    Test FLUSHDB command
+    """
+
+    async def test_flushdb_sync(self):
+        # Set a key
+        await _write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
+        _ = await self.reader.read(100)
+
+        # Flush the database
+        await _write_and_drain(self.writer, b'*1\r\n$5\r\nFLUSHDB\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'+OK\r\n')
+
+        # Try to get the key, should return nil
+        await _write_and_drain(self.writer, b'*2\r\n$3\r\nGET\r\n$3\r\nkey\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'$-1\r\n')  # Key should not be found
+
+    async def test_flushdb_async(self):
+        # Set a key
+        await _write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
+        _ = await self.reader.read(100)
+
+        # Flush the database asynchronously
+        await _write_and_drain(self.writer, b'*2\r\n$7\r\nFLUSHDB\r\n$5\r\nASYNC\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'+OK\r\n')
+
+        # Wait a moment to allow async flush to complete
+        await asyncio.sleep(0.1)
+
+        # Try to get the key, should return nil
+        await _write_and_drain(self.writer, b'*2\r\n$3\r\nGET\r\n$3\r\nkey\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'$-1\r\n')  # Key should not be found
 
 
 if __name__ == "__main__":
