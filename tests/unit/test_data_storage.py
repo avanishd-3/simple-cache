@@ -22,7 +22,7 @@ class BaseDataStorageTest(unittest.IsolatedAsyncioTestCase):
 
 class BasicDataStorageTests(BaseDataStorageTest):
     """
-    SET, GET, TYPE, EXISTS tests
+    SET, GET, TYPE, EXISTS, DEL tests
     """
 
     async def test_set_and_get(self):
@@ -69,6 +69,17 @@ class BasicDataStorageTests(BaseDataStorageTest):
     async def test_exists_with_nonexistent_key(self):
         exists = await self.storage.exists("nope")
         self.assertFalse(exists)
+
+    async def test_del_with_existing_key(self):
+        await self.storage.set("to_delete", "yes")
+        deleted = await self.storage.delete("to_delete")
+        self.assertTrue(deleted)
+        self.assertTrue("to_delete" not in self.storage.storage_dict)
+        self.assertEqual(await self.storage.exists("to_delete"), False)
+
+    async def test_del_with_nonexistent_key(self):
+        deleted = await self.storage.delete("nope")
+        self.assertFalse(deleted)
 
 
 class ListDataStorageTests(BaseDataStorageTest):

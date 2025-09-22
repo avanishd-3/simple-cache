@@ -100,6 +100,21 @@ class DataStorage():
                 logging.info(f"Key not found: {key}")
                 return None
             
+    async def delete(self, key: str) -> bool:
+        """
+        Remove the specified key.
+
+        Return True if the key was removed, False if the key did not exist.
+        """
+        async with self.lock:
+            if key in self.storage_dict:
+                del self.storage_dict[key]
+                logging.info(f"Deleted key: {key}")
+                return True
+            else:
+                logging.info(f"Key not found for deletion: {key}")
+                return False
+
     # TODO: Add support for set, zset, hash, stream
     async def key_type(self, key: str) -> Type[None | str | list]:
         """

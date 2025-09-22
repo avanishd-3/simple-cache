@@ -367,6 +367,20 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
 
                     i += 1 + len(keys)  # Move to next command
 
+                case "DEL":
+                    keys: list[str] = command_list[i + 1 : command_list_len]
+
+                    logging.info(f"DEL: keys {keys}")
+
+                    num_deleted_keys: int = 0
+                    for key in keys:
+                        num_deleted_keys += 1 if await storage_data.delete(key) else 0
+
+                    writer.write(format_integer_success(num_deleted_keys))
+                    await writer.drain()  # Flush write buffer
+
+                    i += 1 + len(keys)  # Move to next command
+
                 case "FLUSHDB":
                     # Flushing is sync by default for Redis, so copying this behaviour
                     method: Literal["SYNC", "ASYNC"] = command_list[i + 1] if i + 1 < command_list_len else ""
