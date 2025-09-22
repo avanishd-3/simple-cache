@@ -18,6 +18,7 @@ from .format_response import (
 from .data_storage import DataStorage
 
 from .utils.profiler import profile
+from .utils.conditional_decorator import conditional_decorator
 
 logging.basicConfig(level=logging.CRITICAL)
 
@@ -410,7 +411,7 @@ async def start_server() -> None:
     async with server:
         await server.serve_forever()
 
-@profile(output_file="profile_stats.prof")
+@conditional_decorator(profile(output_file="profile_stats.prof"), condition=False) # Change to True to enable profiling
 async def main() -> None:
     """
     Note: Most of the runtime of the program is spent in asyncio selector, so rewrite to Rust or Go once API is stable
