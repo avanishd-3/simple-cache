@@ -17,7 +17,9 @@ from .format_response import (
 
 from .data_storage import DataStorage
 
-logging.basicConfig(level=logging.INFO)
+from .utils.profiler import profile
+
+logging.basicConfig(level=logging.CRITICAL)
 
 # Data
 storage_data: DataStorage = DataStorage()
@@ -380,8 +382,12 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
     await writer.wait_closed()
 
 
+async def start_server() -> None:
+    """
+    Starts the asyncio server on localhost:6379
 
-async def main() -> None:
+    Note: uvloop performed worse than default asyncio event loop in benchmarks. Do not use it.
+    """
     # You can use print statements as follows for debugging, they'll be visible when running tests.
     print("Logs from your program will appear here!")
 
@@ -390,6 +396,17 @@ async def main() -> None:
     async with server:
         await server.serve_forever()
 
+@profile(output_file="profile_stats.prof")
+async def main() -> None:
+    """
+    Note: Most of the runtime of the program is spent in asyncio selector, so rewrite to Rust or Go once API is stable
+    """
+    try:
+        await start_server()
+    except asyncio.exceptions.CancelledError:
+        logging.info("Server shutting down...")
+    finally:
+        await asyncio.sleep(0.1)  # Give some time for all tasks to complete
+
 if __name__ == "__main__":
-    loop = asyncio.new_event_loop()
-    loop.run_until_complete(main())
+    asyncio.run(main())

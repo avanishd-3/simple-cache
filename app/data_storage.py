@@ -8,7 +8,7 @@ import time
 
 import heapq
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.CRITICAL)
 
 ValueWithExpiry = namedtuple("ValueWithExpiry", ["value", "expiry_time"])
 BlockedClientFutureResult = namedtuple("BlockedClientFutureResult", ["key", "removed_item", "timestamp"])
@@ -17,6 +17,8 @@ BlockedClientFutureResult = namedtuple("BlockedClientFutureResult", ["key", "rem
 class DataStorage():
     """
     Stores all data and provides concurrent-safe data access
+
+    Note: Using a per-key lock led to worse performance, probably due to the overhead of managing many locks.
     """
 
     def __init__(self):
