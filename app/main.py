@@ -383,6 +383,11 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
 
 
 async def start_server() -> None:
+    """
+    Starts the asyncio server on localhost:6379
+
+    Note: uvloop performed worse than default asyncio event loop in benchmarks. Do not use it.
+    """
     # You can use print statements as follows for debugging, they'll be visible when running tests.
     print("Logs from your program will appear here!")
 
@@ -393,6 +398,9 @@ async def start_server() -> None:
 
 @profile(output_file="profile_stats.prof")
 async def main() -> None:
+    """
+    Note: Most of the runtime of the program is spent in asyncio selector, so rewrite to Rust or Go once API is stable
+    """
     try:
         await start_server()
     except asyncio.exceptions.CancelledError:
