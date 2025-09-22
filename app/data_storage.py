@@ -27,6 +27,16 @@ class DataStorage():
         # Is a heap
         self.blocked_clients = {}  # key: list blocking for, value: (timestamp, future, key)
 
+    async def exists(self, key: str) -> bool:
+        """
+        Check if a key exists in the storage.
+
+        Return True if the key exists, False otherwise.
+        """
+
+        async with self.lock:
+            return key in self.storage_dict
+
     def _unblock_clients_and_pop(self, key: str, accessed_list: list) -> None:
         """
         Unblock any clients that used BLPOP to wait on this list.

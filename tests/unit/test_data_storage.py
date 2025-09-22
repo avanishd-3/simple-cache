@@ -22,7 +22,7 @@ class BaseDataStorageTest(unittest.IsolatedAsyncioTestCase):
 
 class BasicDataStorageTests(BaseDataStorageTest):
     """
-    SET, GET, TYPE tests
+    SET, GET, TYPE, EXISTS tests
     """
 
     async def test_set_and_get(self):
@@ -60,6 +60,15 @@ class BasicDataStorageTests(BaseDataStorageTest):
         await self.storage.xadd("mystream", "1-0", {"field1": "value1"})
         key_type = await self.storage.key_type("mystream")
         self.assertEqual(key_type, Type[dict])
+
+    async def test_exists_with_existing_key(self):
+        await self.storage.set("existent", "yes")
+        exists = await self.storage.exists("existent")
+        self.assertTrue(exists)
+
+    async def test_exists_with_nonexistent_key(self):
+        exists = await self.storage.exists("nope")
+        self.assertFalse(exists)
 
 
 class ListDataStorageTests(BaseDataStorageTest):

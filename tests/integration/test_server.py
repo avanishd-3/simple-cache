@@ -41,7 +41,7 @@ class TestServer(unittest.IsolatedAsyncioTestCase):
 
 class BasicCommandsTests(TestServer):
     """
-    Test PING, ECHO, SET, GET, TYPE commands
+    Test PING, ECHO, SET, GET, TYPE, EXISTS commands
     """
 
     async def test_single_ping(self):
@@ -132,6 +132,27 @@ class BasicCommandsTests(TestServer):
         await _write_and_drain(self.writer, b'*2\r\n$4\r\nTYPE\r\n$16\r\nshould_be_stream\r\n')
         response = await self.reader.read(100)
         self.assertEqual(response, b'+stream\r\n')
+
+    async def test_exists_with_existing_key(self):
+        await _write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nexistent\r\n$3\r\nyes\r\n')
+        _ = await self.reader.read(100)
+        await _write_and_drain(self.writer, b'*2\r\n$6\r\nEXISTS\r\n$8\r\nexistent\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':1\r\n')
+
+    async def test_exists_with_nonexistent_key(self):
+        await _write_and_drain(self.writer, b'*2\r\n$6\r\nEXISTS\r\n$4\r\nnope\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':0\r\n')
+
+    async def test_exists_with_multiple_keys(self):
+        await _write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey1\r\n$5\r\nvalue\r\n')
+        _ = await self.reader.read(100)
+        await _write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey2\r\n$5\r\nvalue\r\n')
+        _ = await self.reader.read(100)
+        await _write_and_drain(self.writer, b'*4\r\n$6\r\nEXISTS\r\n$4\r\nkey1\r\n$4\r\nkey2\r\n$4\r\nkey3\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':2\r\n')
 
 
 class ListTests(TestServer):
