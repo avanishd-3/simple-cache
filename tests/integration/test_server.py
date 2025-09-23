@@ -2,6 +2,7 @@ import unittest
 import asyncio
 
 from app.main import main
+from app.utils.writer_utils import close_writer
 
 def _write_and_drain(writer: asyncio.StreamWriter, data: bytes):
     """
@@ -31,12 +32,14 @@ class TestServer(unittest.IsolatedAsyncioTestCase):
         # Flush the db to ensure clean state
         await _write_and_drain(self.writer, b'*1\r\n$5\r\nFLUSHDB\r\n')
 
-        # Cancel server tasks so no interference between tests
+        # Shutdown the server
+        # This is just here to be a test of the SHUTDOWN command
+        await _write_and_drain(self.writer, b'*1\r\n$8\r\nSHUTDOWN\r\n')
+
+        # Cancel server task so no interference between tests
         self.server_task.cancel()
 
-        # See: https://docs.python.org/3/library/asyncio-stream.html#examples
-        self.writer.close()
-        await self.writer.wait_closed()
+        await close_writer(self.writer)
 
 
 class BasicCommandsTests(TestServer):
@@ -309,7 +312,7 @@ class StreamTests(TestServer):
 
 class OtherCommandsTests(TestServer):
     """
-    Test FLUSHDB command
+    Test FLUSHDB and SHUTDOWN commands
     """
 
     async def test_flushdb_sync(self):

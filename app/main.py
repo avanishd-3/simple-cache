@@ -2,6 +2,7 @@ import asyncio
 import logging
 import time
 import os
+import signal
 
 # Type annotations
 from typing import Type, Literal
@@ -19,9 +20,10 @@ from .format_response import (
 from .data_storage import DataStorage
 
 from .utils.profiler import profile
+from .utils.writer_utils import close_writer
 from .utils.conditional_decorator import conditional_decorator
 
-logging.basicConfig(level=logging.CRITICAL)
+logging.basicConfig(level=logging.INFO)
 
 # Data
 storage_data: DataStorage = DataStorage()
@@ -45,17 +47,35 @@ async def redis_parser(data: bytes) -> list[str]:
 async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
     data = None
 
-    while data != b"QUIT\r\n":
+    while True:
         try:
             data = await reader.read(1024)
         except BrokenPipeError: # Happens when client disconnects abruptly
             logging.info("Client disconnected")
             break
         
-        if not data:
+        if not data: # Client disconnected (I've not seen this happen, but just in case)
             break
 
         command_list = await redis_parser(data)
+
+        operation: str = command_list[0].upper() if command_list else ""
+
+        if operation == "SHUTDOWN": 
+            # Initiate server shutdown
+            # Do not close tasks here, as this would interfere with KeyboardInterrupt handling
+
+            # No need to drain writer here, since previous command would have done that
+            logging.info("Shutdown command received...")
+            logging.info("Closing connection with client...")
+            await close_writer(writer)
+
+            logging.info("Killing self with SIGINT to stop the server gracefully...")
+            # Send SIGINT to self to stop the server gracefully
+            # This is kind of a hack, but raising asyncio.CancelledError here doesn't work properly
+            # KeyboardInterrupt is handled properly in main, so this works fine
+            os.kill(os.getpid(), signal.SIGINT)
+            break # It sends the unkown command response here otherwise
 
         command_list_len: int = len(command_list)
         i: int = 0
@@ -419,18 +439,21 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
 
                     i += 1  # Move to next command
 
-    writer.close()
+    # This is just the client disconnecting -> do not shut down server if this happens
+    logging.info("Closing connection with client")
     try:
-        await writer.wait_closed()
+        await close_writer(writer)
     except BrokenPipeError: # Happens when client disconnects abruptly
         logging.info("Client disconnected before connection could be closed")
 
-
-async def start_server() -> None:
+@conditional_decorator(profile(output_file="profile_stats.prof"), condition=False) # Change to True to enable profiling
+async def main() -> None:
     """
     Starts the asyncio server on localhost:6379
 
-    Note: uvloop performed worse than default asyncio event loop in benchmarks. Do not use it.
+    Notes: 
+       1. uvloop performed worse than default asyncio event loop in benchmarks. Do not use it.
+       2. Most of the runtime of the program is spent in asyncio selector, so rewrite to Rust or Go once API is stable
     """
     # You can use print statements as follows for debugging, they'll be visible when running tests.
     logging.info("Starting server on localhost:6379")
@@ -438,20 +461,20 @@ async def start_server() -> None:
 
     server = await asyncio.start_server(handle_server, "localhost", 6379) # Client function called whenever client sends a message
 
-    async with server:
-        await server.serve_forever()
-
-@conditional_decorator(profile(output_file="profile_stats.prof"), condition=False) # Change to True to enable profiling
-async def main() -> None:
-    """
-    Note: Most of the runtime of the program is spent in asyncio selector, so rewrite to Rust or Go once API is stable
-    """
     try:
-        await start_server()
-    except asyncio.exceptions.CancelledError:
-        logging.info("Server shutting down...")
-    finally:
-        await asyncio.sleep(0.1)  # Give some time for all tasks to complete
+        await server.serve_forever()
+    except asyncio.CancelledError:
+        logging.info("Server serve_forever cancelled, shutting down server...")
+        # Close tasks here instead of in handle_server to handle KeyboardInterrupt properly
+        for task in asyncio.all_tasks():
+            logging.info(f"Current task: {task}")
+            if task is not asyncio.current_task():
+                logging.info("Cancelling task...")
+                task.cancel()
+        server.close()
+        await server.wait_closed()
+        
+        logging.info("Server shut down successfully")
 
 if __name__ == "__main__":
     asyncio.run(main())
