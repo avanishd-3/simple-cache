@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import time
+import os
 
 # Type annotations
 from typing import Type, Literal
@@ -432,7 +433,8 @@ async def start_server() -> None:
     Note: uvloop performed worse than default asyncio event loop in benchmarks. Do not use it.
     """
     # You can use print statements as follows for debugging, they'll be visible when running tests.
-    print("Logs from your program will appear here!")
+    logging.info("Starting server on localhost:6379")
+    logging.info(f"Process ID: {os.getpid()}")
 
     server = await asyncio.start_server(handle_server, "localhost", 6379) # Client function called whenever client sends a message
 
