@@ -11,3 +11,10 @@ async def close_writer(writer: asyncio.StreamWriter) -> None:
     """
     writer.close()
     await writer.wait_closed()
+
+async def write_and_drain(writer: asyncio.StreamWriter, data: bytes):
+    """
+    Helper function to write data to the writer and drain it immediately.
+    """
+    writer.write(data)
+    await writer.drain()
