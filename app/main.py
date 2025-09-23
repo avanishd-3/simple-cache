@@ -45,7 +45,11 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
     data = None
 
     while data != b"QUIT\r\n":
-        data = await reader.read(1024)
+        try:
+            data = await reader.read(1024)
+        except BrokenPipeError: # Happens when client disconnects abruptly
+            logging.info("Client disconnected")
+            break
         
         if not data:
             break
@@ -383,15 +387,22 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
 
                 case "FLUSHDB":
                     # Flushing is sync by default for Redis, so copying this behaviour
-                    method: Literal["SYNC", "ASYNC"] = command_list[i + 1] if i + 1 < command_list_len else ""
+                    method: Literal["SYNC", "ASYNC", ""] = command_list[i + 1] if i + 1 < command_list_len else ""
 
-                    logging.info(f"FLUSHDB: method {method}")
+                    if method == "": # So logs show when default method is used
+                        logging.info("FLUSHDB with default method SYNC")
+                    else:
+                        logging.info(f"FLUSHDB with method: {method}")
+
                     if method == "ASYNC":
                         await storage_data.flushdb_async()
                     else:
                         storage_data.flushdb_sync()
                     writer.write(format_simple_string("OK"))
-                    await writer.drain()  # Flush write buffer
+                    try:
+                        await writer.drain()  # Flush write buffer
+                    except ConnectionError: # This happens in the integration tests (I haven't found it in normal usage yet)
+                        logging.info("Client disconnected before FLUSHDB response could be sent")
 
                     # Move to next command
                     if method == "":  # No method specified
@@ -408,7 +419,10 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                     i += 1  # Move to next command
 
     writer.close()
-    await writer.wait_closed()
+    try:
+        await writer.wait_closed()
+    except BrokenPipeError: # Happens when client disconnects abruptly
+        logging.info("Client disconnected before connection could be closed")
 
 
 async def start_server() -> None:
