@@ -2,6 +2,9 @@
 
 Non-persistent, minimal key-value store inspired by Redis. Uses Python asyncio event loop to manage clients.
 
+The only dependency is snakeviz, which is for visualizing profiling data. The server has no dependencies and can be run without uv.
+See: server shell script.
+
 simple-cache uses RESP 2, so using Redis clients like redis-cli and language-specific Redis SDKs should work, though I've only tested with redis-cli.
 
 The supported commands and their differences compared to the Redis versions are outlined below.
@@ -18,6 +21,8 @@ The supported commands and their differences compared to the Redis versions are 
    | PING    | Optional argument message not supported   |
    | ECHO    | None                                      |
    | TYPE    | Only supports strings, lists, and streams |
+   | EXISTS  | None                                      |
+   | DEL     | None                                      |
 </details>
 
 <details>
@@ -60,7 +65,8 @@ The supported commands and their differences compared to the Redis versions are 
    <summary>Other commands</summary>
 
 
-   | Command | Deviation from Redis |
-   | ------- | ---------------------|
-   | FLUSHDB | None                 |
+   | Command  | Deviation from Redis                                                       |
+   | -------- | -------------------------------------------------------------------------- |
+   | FLUSHDB  | None                                                                       |
+   | SHUTDOWN | No optional arguments supported<br><br>Does not fail b/c no saving to disk<br><br>Signal handling not implemented |
 </details>
