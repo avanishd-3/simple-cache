@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import sys
 import signal
 import argparse
 
@@ -128,16 +129,7 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
     except BrokenPipeError: # Happens when client disconnects abruptly
         logging.info("Client disconnected before connection could be closed")
 
-@conditional_decorator(profile(output_file="profile_stats.prof"), condition=False) # Change to True to enable profiling
-async def main() -> None:
-    """
-    Starts the asyncio server on localhost:6379
-
-    Notes: 
-       1. uvloop performed worse than default asyncio event loop in benchmarks. Do not use it.
-       2. Most of the runtime of the program is spent in asyncio selector, so rewrite to Rust or Go once API is stable
-    """
-    
+def _parse_args(args):
     # Allow selecting port from cli arg
     parser = argparse.ArgumentParser(description="Start the simple-cache server.")
     parser.add_argument(
@@ -146,16 +138,23 @@ async def main() -> None:
     parser.add_argument(
         "--debug", action="store_true", default=False, help="Enable debug logging (default: False)"
     )
-    args = parser.parse_args()
+    return parser.parse_args()
 
-    port: int = args.port
-    debug: bool = args.debug
+@conditional_decorator(profile(output_file="profile_stats.prof"), condition=False) # Change to True to enable profiling
+async def main(port: int = 6379, debug: bool = False) -> None:
+    """
+    Starts the asyncio server on localhost:6379
+
+    Notes: 
+       1. uvloop performed worse than default asyncio event loop in benchmarks. Do not use it.
+       2. Most of the runtime of the program is spent in asyncio selector, so rewrite to Rust or Go once API is stable
+    """
 
     if debug:
         logging.basicConfig(level=logging.DEBUG)
         logging.debug("Debug logging enabled")
     else: # Because info is being used for variable state (no trace level in Python)
-        logging.basicConfig(level=logging.WARN)
+        logging.basicConfig(level=logging.INFO)
 
     logging.critical(f"Starting server on localhost:{port}")
     logging.critical(f"Process ID: {os.getpid()}")
@@ -178,4 +177,5 @@ async def main() -> None:
         logging.info("Server shut down successfully")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    parser = _parse_args(sys.argv[1:])
+    asyncio.run(main(port=parser.port, debug=parser.debug))
