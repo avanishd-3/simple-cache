@@ -362,7 +362,6 @@ class DataStorage():
 
         # Validate entry ID before adding entry to the stream
         # Entry ID must be in the format <milliseconds>-<sequence number>
-        # TODO -> Add support for partially and fully auto-generated IDs
 
         auto_generate_milliseconds: bool = False
         auto_generate_sequence_number: bool = False
@@ -389,7 +388,6 @@ class DataStorage():
                 sequence_number = int(id_parts[1])
             except ValueError:
                 # Check if sequence number needs to be auto-generated
-                # TODO -> Add support for auto-generating milliseconds
                 if id_parts[1] == "*":
                     logging.info(f"Need to auto-generate sequence number for ID {id} in stream with key {key}")
                     auto_generate_sequence_number = True
