@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import signal
+import argparse
 
 # Type annotations
 from typing import Literal
@@ -138,11 +139,21 @@ async def main() -> None:
        1. uvloop performed worse than default asyncio event loop in benchmarks. Do not use it.
        2. Most of the runtime of the program is spent in asyncio selector, so rewrite to Rust or Go once API is stable
     """
-    # You can use print statements as follows for debugging, they'll be visible when running tests.
-    logging.info("Starting server on localhost:6379")
+    
+    # Allow selecting port from cli arg
+    parser = argparse.ArgumentParser(description="Start the simple-cache server.")
+    parser.add_argument(
+        "--port", type=int, default=6379, help="Port number to run the server on (default: 6379)"
+    )
+    args = parser.parse_args()
+
+    port: int = args.port
+
+
+    logging.info(f"Starting server on localhost:{port}")
     logging.info(f"Process ID: {os.getpid()}")
 
-    server = await asyncio.start_server(handle_server, "localhost", 6379) # Client function called whenever client sends a message
+    server = await asyncio.start_server(handle_server, "localhost", port) # Client function called whenever client sends a message
 
     try:
         await server.serve_forever()

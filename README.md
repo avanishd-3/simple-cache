@@ -70,3 +70,7 @@ The supported commands and their differences compared to the Redis versions are 
    | FLUSHDB  | None                                                                       |
    | SHUTDOWN | No optional arguments supported<br><br>Does not fail b/c no saving to disk<br><br>Signal handling not implemented |
 </details>
+
+## Configuration Options
+
+- Port: Pass --port flag to shell script to change port simple cache uses. The default port is 6379, just like Redis.
