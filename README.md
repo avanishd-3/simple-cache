@@ -75,3 +75,6 @@ The supported commands and their differences compared to the Redis versions are 
 
 - Port: Pass --port flag with port number to shell script to change port simple cache uses. The default port is 6379, just like Redis.
 - Debug: Pass --debug flag to enable debug mode. Debug mode logs command handling and variable state.
+
+## Run Tests
+- By default, the test shell script runs both unit and integration tests. Pass -u to run only unit tests or -i to run only integration tests. 
