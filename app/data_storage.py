@@ -11,12 +11,13 @@ import heapq
 ValueWithExpiry = namedtuple("ValueWithExpiry", ["value", "expiry_time"])
 BlockedClientFutureResult = namedtuple("BlockedClientFutureResult", ["key", "removed_item", "timestamp"])
 
-# TODO -> Turn lists into linked list from array (See: https://redis.io/docs/latest/develop/data-types/lists/)
 class DataStorage():
     """
     Stores all data and provides concurrent-safe data access
 
-    Note: Using a per-key lock led to worse performance, probably due to the overhead of managing many locks.
+    Note: 
+    1. Using a per-key lock led to worse performance, probably due to the overhead of managing many locks.
+    2. Lists are stored as Python lists instead of deque to improve cache performance and make indexing faster.
     """
 
     def __init__(self):
