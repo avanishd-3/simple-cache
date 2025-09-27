@@ -25,16 +25,27 @@ class DataStorage():
         self.lock = asyncio.Lock()
         # Is a heap
         self.blocked_clients = {}  # key: list blocking for, value: (timestamp, future, key)
-
-    async def exists(self, key: str) -> bool:
+        
+    async def unblock_all_blocked_clients(self) -> None:
         """
-        Check if a key exists in the storage.
-
-        Return True if the key exists, False otherwise.
+        Unblock all blocked clients by setting their futures to None.
+        This is used during server shutdown to ensure no clients remain blocked.
         """
 
-        async with self.lock:
-            return key in self.storage_dict
+        for key, blocked_list in self.blocked_clients.items():
+            logging.info(f" Unblocking {len(blocked_list)} clients blocked on list: {key}")
+
+            while len(blocked_list) > 0:
+                client_timestamp: float = blocked_list[0][0]
+                logging.info(f"Unblocking client with timestamp: {client_timestamp}")
+
+                _, future, list_key = heapq.heappop(blocked_list)
+                if not future.done():
+                    future.set_result(None)
+                else:
+                    logging.info(f"Future already done for blocked client on list: {key}")
+
+        self.blocked_clients.clear()
 
     def _unblock_clients_and_pop(self, key: str, accessed_list: list) -> None:
         """
@@ -73,6 +84,16 @@ class DataStorage():
         for future, blocked_info in futures_to_set.items():
             new_blocked_info = BlockedClientFutureResult(blocked_info.key, removed_item, blocked_info.timestamp)
             future.set_result(new_blocked_info)
+
+    async def exists(self, key: str) -> bool:
+        """
+        Check if a key exists in the storage.
+
+        Return True if the key exists, False otherwise.
+        """
+
+        async with self.lock:
+            return key in self.storage_dict
 
     async def set(self, key: str, value: str, expiry_time: float | None = None) -> None:
         async with self.lock:

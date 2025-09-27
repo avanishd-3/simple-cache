@@ -73,6 +73,21 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                 # No need to drain writer here, since previous command would have done that
                 logging.info("Shutdown command received...")
                 logging.info("Closing connection with client...")
+
+                # Unblock any blocked clients before shutting down
+                logging.info("Unblocking all blocked clients...")
+                await storage_data.unblock_all_blocked_clients()
+
+                # Cancel all other tasks except current one
+                # So blpop does not raise exception when blocked info is removed
+                logging.info("Cancelling all other tasks...")
+                for task in asyncio.all_tasks():
+                    logging.info(f"Current task: {task}")
+                    if task is not asyncio.current_task():
+                        logging.info("Cancelling task...")
+                        task.cancel()
+
+                # Close connection with client
                 await close_writer(writer)
 
                 logging.info("Killing self with SIGINT to stop the server gracefully...")
@@ -165,12 +180,7 @@ async def main(port: int = 6379, debug: bool = False) -> None:
         await server.serve_forever()
     except asyncio.CancelledError:
         logging.info("Server serve_forever cancelled, shutting down server...")
-        # Close tasks here instead of in handle_server to handle KeyboardInterrupt properly
-        for task in asyncio.all_tasks():
-            logging.info(f"Current task: {task}")
-            if task is not asyncio.current_task():
-                logging.info("Cancelling task...")
-                task.cancel()
+        # Close server here to handle KeyboardInterrupt properly
         server.close()
         await server.wait_closed()
         
