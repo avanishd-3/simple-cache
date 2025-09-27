@@ -31,7 +31,7 @@ The supported commands and their differences compared to the Redis versions are 
 
    | Command | Deviation from Redis                                                                                |
    | ------- | --------------------------------------------------------------------------------------------------- |
-   | SET     | These optional arguments are not supported:<br><br>EX<br>EXAT<br>PXAT<br>NX<br>XX<br>KEEPTTL<br>GET |
+   | SET     | These optional arguments are not supported:<br>NX<br>XX<br>KEEPTTL<br>GET |
    | GET     | None                                                                                                |
    
 </details>

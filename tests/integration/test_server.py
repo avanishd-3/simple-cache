@@ -1,5 +1,6 @@
 import unittest
 import asyncio
+import time
 
 from app.main import main
 from app.utils.writer_utils import close_writer, write_and_drain
@@ -96,8 +97,37 @@ class BasicCommandsTests(TestServer):
         response = await self.reader.read(100)
         self.assertEqual(response, b'$-1\r\n')
 
-    async def test_set_with_expiry(self):
+    async def test_set_with_expiry_milliseconds(self):
         await write_and_drain(self.writer, b'*5\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n$2\r\nPX\r\n$3\r\n100\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'+OK\r\n')
+        await asyncio.sleep(0.1)  # Wait for key to expire
+        await write_and_drain(self.writer, b'*2\r\n$3\r\nGET\r\n$3\r\nkey\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'$-1\r\n')  # Key should be expired
+
+    async def test_set_with_expiry_seconds(self):
+        await write_and_drain(self.writer, b'*5\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n$2\r\nEX\r\n$1\r\n1\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'+OK\r\n')
+        await asyncio.sleep(1)  # Wait for key to expire
+        await write_and_drain(self.writer, b'*2\r\n$3\r\nGET\r\n$3\r\nkey\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'$-1\r\n')  # Key should be expired
+
+    async def test_set_with_expiry_at_unix_time_seconds(self):
+        future_time = int(time.time()) + 1  # 1 second in the future
+        await write_and_drain(self.writer, f'*5\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n$4\r\nEXAT\r\n${len(str(future_time))}\r\n{future_time}\r\n'.encode())
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'+OK\r\n')
+        await asyncio.sleep(1)  # Wait for key to expire
+        await write_and_drain(self.writer, b'*2\r\n$3\r\nGET\r\n$3\r\nkey\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'$-1\r\n')  # Key should be expired
+
+    async def test_set_with_expiry_at_unix_time_milliseconds(self):
+        future_time = int(time.time() * 1000) + 100  # 100 ms in the future
+        await write_and_drain(self.writer, f'*5\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n$4\r\nPXAT\r\n${len(str(future_time))}\r\n{future_time}\r\n'.encode())
         response = await self.reader.read(100)
         self.assertEqual(response, b'+OK\r\n')
         await asyncio.sleep(0.1)  # Wait for key to expire

@@ -51,22 +51,38 @@ async def _handle_set(writer: asyncio.StreamWriter, args: list, storage: DataSto
 
     upper_args: list = [arg.upper() for arg in args]
 
-    # Expiry
-    if "PX" in upper_args:
-        expiry_amount: int = int(args[upper_args.index("PX") + 1]) if (upper_args.index("PX") + 1) < len(upper_args) else 0
+    expiry_flags = {"EX", "PX", "EXAT", "PXAT"}
+    if any(flag in upper_args for flag in expiry_flags):
+        if "EX" in upper_args: # Expiry in seconds
+            expiry_amount: int = int(args[upper_args.index("EX") + 1]) if (upper_args.index("EX") + 1) < len(upper_args) else 0
 
-        expiry_time: float = time.time() + (expiry_amount / 1000)  # Convert milliseconds to seconds
+            expiry_time: float = time.time() + expiry_amount
 
+        elif "PX" in upper_args: # Expiry in milliseconds
+            expiry_amount: int = int(args[upper_args.index("PX") + 1]) if (upper_args.index("PX") + 1) < len(upper_args) else 0
+
+            expiry_time: float = time.time() + (expiry_amount / 1000)  # Convert milliseconds to seconds
+
+        elif "EXAT" in upper_args: # Expiry at specific unix time in seconds
+            expiry_time = float(args[upper_args.index("EXAT") + 1]) if (upper_args.index("EXAT") + 1) < len(upper_args) else 0.0
+
+        elif "PXAT" in upper_args: # Expiry at specific unix time in milliseconds
+
+            # Convert milliseconds to seconds to match the rest of the time code 
+            expiry_time = float(args[upper_args.index("PXAT") + 1]) / 1000 if (upper_args.index("PXAT") + 1) < len(upper_args) else 0.0
+
+        # Common stuff
         await storage.set(key, value, expiry_time)
 
         logging.info(f"Set key with expiry: {key} = {value}, expiry = {expiry_time}")
 
+        await write_and_drain(writer, format_simple_string("OK"))
     else:
         await storage.set(key, value)
 
         logging.info(f"Set key without expiry: {key} = {value}")
 
-    await write_and_drain(writer, format_simple_string("OK"))
+        await write_and_drain(writer, format_simple_string("OK"))
 
 async def _handle_get(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
     """
