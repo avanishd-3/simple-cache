@@ -73,4 +73,5 @@ The supported commands and their differences compared to the Redis versions are 
 
 ## Configuration Options
 
-- Port: Pass --port flag to shell script to change port simple cache uses. The default port is 6379, just like Redis.
+- Port: Pass --port flag with port number to shell script to change port simple cache uses. The default port is 6379, just like Redis.
+- Debug: Pass --debug flag to enable debug mode. Debug mode logs command handling and variable state.

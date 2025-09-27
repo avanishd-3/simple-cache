@@ -24,8 +24,6 @@ from .commands.string_commands import handle_string_commands
 from .commands.list_commands import handle_list_commands
 from .commands.stream_commands import handle_stream_commands
 
-logging.basicConfig(level=logging.INFO)
-
 # Data
 storage_data: DataStorage = DataStorage()
 
@@ -145,13 +143,22 @@ async def main() -> None:
     parser.add_argument(
         "--port", type=int, default=6379, help="Port number to run the server on (default: 6379)"
     )
+    parser.add_argument(
+        "--debug", action="store_true", default=False, help="Enable debug logging (default: False)"
+    )
     args = parser.parse_args()
 
     port: int = args.port
+    debug: bool = args.debug
 
+    if debug:
+        logging.basicConfig(level=logging.DEBUG)
+        logging.debug("Debug logging enabled")
+    else: # Because info is being used for variable state (no trace level in Python)
+        logging.basicConfig(level=logging.WARN)
 
-    logging.info(f"Starting server on localhost:{port}")
-    logging.info(f"Process ID: {os.getpid()}")
+    logging.critical(f"Starting server on localhost:{port}")
+    logging.critical(f"Process ID: {os.getpid()}")
 
     server = await asyncio.start_server(handle_server, "localhost", port) # Client function called whenever client sends a message
 
