@@ -25,6 +25,8 @@ class DataStorage():
         self.lock = asyncio.Lock()
         # Is a heap
         self.blocked_clients = {}  # key: list blocking for, value: (timestamp, future, key)
+
+    ############################################### Helpers ####################################################
         
     async def unblock_all_blocked_clients(self) -> None:
         """
@@ -85,6 +87,8 @@ class DataStorage():
             new_blocked_info = BlockedClientFutureResult(blocked_info.key, removed_item, blocked_info.timestamp)
             future.set_result(new_blocked_info)
 
+    ############################################### General ####################################################
+
     async def exists(self, key: str) -> bool:
         """
         Check if a key exists in the storage.
@@ -94,6 +98,65 @@ class DataStorage():
 
         async with self.lock:
             return key in self.storage_dict
+        
+    # TODO: Add support for set, zset, hash, stream
+    async def key_type(self, key: str) -> Type[None | str | list]:
+        """
+        Return type of key
+
+        Redis types: string, list, set, zset, hash, stream
+
+        Currently supported types: string, list
+        """
+        async with self.lock:
+            item = self.storage_dict.get(key, None)
+            if item is None:
+                logging.info(f"Key not found: {key}")
+                return Type[None]
+            elif isinstance(item.value, str):
+                logging.info(f"Key '{key}' is of type string")
+                return Type[str]
+            elif isinstance(item.value, list):
+                logging.info(f"Key '{key}' is of type list")
+                return Type[list]
+            elif isinstance(item.value, dict):
+                logging.info(f"Key '{key}' is of type stream")
+                return Type[dict]
+            else:
+                logging.info(f"Key '{key}' is of unknown type")
+                return Type[None]
+        
+    async def delete(self, key: str) -> bool:
+        """
+        Remove the specified key.
+
+        Return True if the key was removed, False if the key did not exist.
+        """
+        async with self.lock:
+            if key in self.storage_dict:
+                del self.storage_dict[key]
+                logging.info(f"Deleted key: {key}")
+                return True
+            else:
+                logging.info(f"Key not found for deletion: {key}")
+                return False
+        
+    async def flushdb_async(self) -> None:
+        """
+        Remove all keys from the current database.
+        """
+        async with self.lock:
+            self.storage_dict.clear()
+            logging.info("Flushed all data from the database (async)")
+
+    def flushdb_sync(self) -> None:
+        """
+        Synchronous version of flushdb
+        """
+        self.storage_dict.clear()
+        logging.info("Flushed all data from the database (sync)")
+        
+    ############################################### Strings ####################################################
 
     async def set(self, key: str, value: str, expiry_time: float | None = None) -> None:
         async with self.lock:
@@ -145,47 +208,7 @@ class DataStorage():
                 logging.info(f"Key not found when retrieving TTL: {key}")
                 return None
             
-    async def delete(self, key: str) -> bool:
-        """
-        Remove the specified key.
-
-        Return True if the key was removed, False if the key did not exist.
-        """
-        async with self.lock:
-            if key in self.storage_dict:
-                del self.storage_dict[key]
-                logging.info(f"Deleted key: {key}")
-                return True
-            else:
-                logging.info(f"Key not found for deletion: {key}")
-                return False
-
-    # TODO: Add support for set, zset, hash, stream
-    async def key_type(self, key: str) -> Type[None | str | list]:
-        """
-        Return type of key
-
-        Redis types: string, list, set, zset, hash, stream
-
-        Currently supported types: string, list
-        """
-        async with self.lock:
-            item = self.storage_dict.get(key, None)
-            if item is None:
-                logging.info(f"Key not found: {key}")
-                return Type[None]
-            elif isinstance(item.value, str):
-                logging.info(f"Key '{key}' is of type string")
-                return Type[str]
-            elif isinstance(item.value, list):
-                logging.info(f"Key '{key}' is of type list")
-                return Type[list]
-            elif isinstance(item.value, dict):
-                logging.info(f"Key '{key}' is of type stream")
-                return Type[dict]
-            else:
-                logging.info(f"Key '{key}' is of unknown type")
-                return Type[None]
+    ############################################### Lists ####################################################
             
     async def rpush(self, key: str, items: list) -> int:
         """
@@ -393,6 +416,8 @@ class DataStorage():
 
             return None # RESP specification returns null bulk string for this
         
+    ############################################### Streams ####################################################
+        
     # TODO: Implement stream as radix trie instead of dict
     async def xadd(self, key: str, id: str, field_value_pairs: dict) -> str:
         """
@@ -580,18 +605,5 @@ class DataStorage():
             else:
                 logging.info(f"Key not found or not a stream: {key}")
                 return []
-            
-    async def flushdb_async(self) -> None:
-        """
-        Remove all keys from the current database.
-        """
-        async with self.lock:
-            self.storage_dict.clear()
-            logging.info("Flushed all data from the database (async)")
 
-    def flushdb_sync(self) -> None:
-        """
-        Synchronous version of flushdb
-        """
-        self.storage_dict.clear()
-        logging.info("Flushed all data from the database (sync)")
+    ############################################### Sets ####################################################
