@@ -34,10 +34,9 @@ class HelperFunctionsTests(BaseDataStorageTest):
         ttl = await self.storage.get_ttl("doesnotexist")
         self.assertIsNone(ttl)
 
-
-class BasicDataStorageTests(BaseDataStorageTest):
+class StringDataStorageTests(BaseDataStorageTest):
     """
-    SET, GET, TYPE, EXISTS, DEL tests
+    SET, GET tests
     """
 
     async def test_set_and_get(self):
@@ -56,6 +55,12 @@ class BasicDataStorageTests(BaseDataStorageTest):
         await asyncio.sleep(0.2)
         value = await self.storage.get("expiring")
         self.assertIsNone(value)
+
+
+class BasicDataStorageTests(BaseDataStorageTest):
+    """
+    TYPE, EXISTS, DEL tests
+    """
 
     async def test_type_of_nonexistent_key(self):
         key_type = await self.storage.key_type("nope")

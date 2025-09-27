@@ -37,65 +37,15 @@ class TestServer(unittest.IsolatedAsyncioTestCase):
 
         await close_writer(self.writer)
 
-
-class BasicCommandsTests(TestServer):
+class StringCommandsTests(TestServer):
     """
-    Test PING, ECHO, SET, GET, TYPE, EXISTS, DEL commands
+    Test SET and GET commands
     """
-
-    async def test_single_ping(self):
-        await write_and_drain(self.writer, b'PING')
-        response = await self.reader.read(100)
-        self.assertEqual(response, b'+PONG\r\n')
-
-    async def test_multiple_pings(self):
-        for _ in range(5):
-            await write_and_drain(self.writer, b'PING')
-            response = await self.reader.read(100)
-            self.assertEqual(response, b'+PONG\r\n')
-
-    async def test_multiple_clients(self):
-        clients = []
-        for _ in range(3):
-            reader, writer = await asyncio.open_connection('localhost', self.server_port)
-            clients.append((reader, writer))
-
-        for reader, writer in clients:
-            await write_and_drain(writer, b'PING')
-
-        for reader, writer in clients:
-            response = await reader.read(100)
-            self.assertEqual(response, b'+PONG\r\n')
-            writer.close()
-
-    async def test_echo(self):
-        await write_and_drain(self.writer, b'PING')
-        response = await self.reader.read(100)
-        await write_and_drain(self.writer, b'*2\r\n$4\r\nECHO\r\n$3\r\nhey\r\n')
-        response = await self.reader.read(300)
-        self.assertEqual(response, b'$3\r\nhey\r\n')
-
-    async def test_non_uppercase_commands_work(self):
-        await write_and_drain(self.writer, b'*1\r\n$4\r\nping\r\n')
-        response = await self.reader.read(100)
-        self.assertEqual(response, b'+PONG\r\n')
 
     async def test_set(self):
         await write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
         response = await self.reader.read(100)
         self.assertEqual(response, b'+OK\r\n')
-
-    async def test_get(self):
-        await write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
-        _ = await self.reader.read(100)
-        await write_and_drain(self.writer, b'*2\r\n$3\r\nGET\r\n$3\r\nkey\r\n')
-        response = await self.reader.read(100)
-        self.assertEqual(response, b'$5\r\nvalue\r\n')
-
-    async def test_get_key_not_found(self):
-        await write_and_drain(self.writer, b'*2\r\n$3\r\nGET\r\n$3\r\nnon_existing_key\r\n')
-        response = await self.reader.read(100)
-        self.assertEqual(response, b'$-1\r\n')
 
     async def test_set_with_expiry_milliseconds(self):
         await write_and_drain(self.writer, b'*5\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n$2\r\nPX\r\n$3\r\n100\r\n')
@@ -176,6 +126,61 @@ class BasicCommandsTests(TestServer):
         await write_and_drain(self.writer, b'*2\r\n$3\r\nGET\r\n$3\r\nkey\r\n')
         response = await self.reader.read(100)
         self.assertEqual(response, b'$-1\r\n')  # Key should be expired
+
+    async def test_get(self):
+        await write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*2\r\n$3\r\nGET\r\n$3\r\nkey\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'$5\r\nvalue\r\n')
+
+    async def test_get_key_not_found(self):
+        await write_and_drain(self.writer, b'*2\r\n$3\r\nGET\r\n$3\r\nnon_existing_key\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'$-1\r\n')
+
+
+class BasicCommandsTests(TestServer):
+    """
+    Test PING, ECHO, TYPE, EXISTS, DEL commands
+    """
+
+    async def test_single_ping(self):
+        await write_and_drain(self.writer, b'PING')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'+PONG\r\n')
+
+    async def test_multiple_pings(self):
+        for _ in range(5):
+            await write_and_drain(self.writer, b'PING')
+            response = await self.reader.read(100)
+            self.assertEqual(response, b'+PONG\r\n')
+
+    async def test_multiple_clients(self):
+        clients = []
+        for _ in range(3):
+            reader, writer = await asyncio.open_connection('localhost', self.server_port)
+            clients.append((reader, writer))
+
+        for reader, writer in clients:
+            await write_and_drain(writer, b'PING')
+
+        for reader, writer in clients:
+            response = await reader.read(100)
+            self.assertEqual(response, b'+PONG\r\n')
+            writer.close()
+
+    async def test_echo(self):
+        await write_and_drain(self.writer, b'PING')
+        response = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*2\r\n$4\r\nECHO\r\n$3\r\nhey\r\n')
+        response = await self.reader.read(300)
+        self.assertEqual(response, b'$3\r\nhey\r\n')
+
+    async def test_non_uppercase_commands_work(self):
+        await write_and_drain(self.writer, b'*1\r\n$4\r\nping\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'+PONG\r\n')
 
     async def test_type_string(self):
         await write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
