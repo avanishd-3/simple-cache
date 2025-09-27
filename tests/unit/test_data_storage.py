@@ -19,6 +19,21 @@ class BaseDataStorageTest(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         await self.storage.flushdb_async()
 
+class HelperFunctionsTests(BaseDataStorageTest):
+    """
+    GETTTL tests
+    """
+
+    @patch('time.time', mock_time) # This just makes it easier to test expiry times
+    async def test_get_ttl(self):
+        await self.storage.set("temp_key", "value", expiry_time=mock_time.return_value + 1000) # Expiry time in the future
+        ttl = await self.storage.get_ttl("temp_key")
+        self.assertEqual(ttl, mock_time.return_value + 1000)
+
+    async def test_get_ttl_nonexistent_key(self):
+        ttl = await self.storage.get_ttl("doesnotexist")
+        self.assertIsNone(ttl)
+
 
 class BasicDataStorageTests(BaseDataStorageTest):
     """

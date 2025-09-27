@@ -51,7 +51,7 @@ async def _handle_set(writer: asyncio.StreamWriter, args: list, storage: DataSto
 
     upper_args: list = [arg.upper() for arg in args]
 
-    expiry_flags = {"EX", "PX", "EXAT", "PXAT"}
+    expiry_flags = {"EX", "PX", "EXAT", "PXAT", "KEEPTTL"}
     if any(flag in upper_args for flag in expiry_flags):
         if "EX" in upper_args: # Expiry in seconds
             expiry_amount: int = int(args[upper_args.index("EX") + 1]) if (upper_args.index("EX") + 1) < len(upper_args) else 0
@@ -70,6 +70,14 @@ async def _handle_set(writer: asyncio.StreamWriter, args: list, storage: DataSto
 
             # Convert milliseconds to seconds to match the rest of the time code 
             expiry_time = float(args[upper_args.index("PXAT") + 1]) / 1000 if (upper_args.index("PXAT") + 1) < len(upper_args) else 0.0
+
+        elif "KEEPTTL" in upper_args: # Keep existing TTL, if any
+            existing_ttl = await storage.get_ttl(key)
+            
+            if existing_ttl is not None:
+                expiry_time = existing_ttl
+            else:
+                expiry_time = None
 
         # Common stuff
         await storage.set(key, value, expiry_time)

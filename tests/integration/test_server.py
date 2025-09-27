@@ -135,6 +135,48 @@ class BasicCommandsTests(TestServer):
         response = await self.reader.read(100)
         self.assertEqual(response, b'$-1\r\n')  # Key should be expired
 
+    async def test_set_with_keep_ttl_new_key(self):
+        await write_and_drain(self.writer, b'*5\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n$7\r\nKEEPTTL\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'+OK\r\n')
+        await write_and_drain(self.writer, b'*2\r\n$3\r\nGET\r\n$3\r\nkey\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'$5\r\nvalue\r\n')  # Key should exist without expiry
+
+    async def test_set_with_keep_ttl_existing_key_no_expiry(self):
+        # Set key with expiry
+        await write_and_drain(self.writer, b'*5\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n$2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'+OK\r\n')
+
+        # Update key with KEEPTTL
+        await write_and_drain(self.writer, b'*5\r\n$3\r\nSET\r\n$3\r\nkey\r\n$7\r\nnew_val\r\n$7\r\nKEEPTTL\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'+OK\r\n')
+
+        # Check if key still exists
+        await write_and_drain(self.writer, b'*2\r\n$3\r\nGET\r\n$3\r\nkey\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'$7\r\nnew_val\r\n')  # Key should still exist with new value
+
+    async def test_set_with_keep_ttl_existing_key_with_expiry(self):
+        # Set key with expiry
+        await write_and_drain(self.writer, b'*5\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n$2\r\nPX\r\n$3\r\n100\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'+OK\r\n')
+
+        # Update key with KEEPTTL
+        await write_and_drain(self.writer, b'*5\r\n$3\r\nSET\r\n$3\r\nkey\r\n$7\r\nnew_val\r\n$7\r\nKEEPTTL\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'+OK\r\n')
+
+        await asyncio.sleep(0.1)  # Wait for key to expire
+
+        # Check if key still exists
+        await write_and_drain(self.writer, b'*2\r\n$3\r\nGET\r\n$3\r\nkey\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'$-1\r\n')  # Key should be expired
+
     async def test_type_string(self):
         await write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
         _ = await self.reader.read(100)
