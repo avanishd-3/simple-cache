@@ -607,3 +607,24 @@ class DataStorage():
                 return []
 
     ############################################### Sets ####################################################
+
+    async def sadd(self, key: str, members: list) -> int:
+        """
+        Add one or more members to a set stored at the specified key.
+
+        Create the set with these members if it doesn't exist.
+
+        Return the number of elements that were added to the set, not including all the elements already present in the set.
+        """
+        async with self.lock:
+            if key not in self.storage_dict:
+                self.storage_dict[key] = ValueWithExpiry(set(), None)
+                logging.info(f"Created new set for key: {key}")
+
+            accessed_set: set = self.storage_dict[key].value
+            initial_size: int = len(accessed_set)
+            accessed_set.update(members) # Duplicate members are ignored
+            logging.info(f"Added {members} to set {key}")
+
+            # Return number of new elements added to the set
+            return len(accessed_set) - initial_size

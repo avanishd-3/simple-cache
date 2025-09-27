@@ -381,6 +381,45 @@ class StreamTests(TestServer):
 
         self.assertEqual(response, should_be)
 
+class SetTests(TestServer):
+    """
+    Test SADD command
+    """
+
+    async def test_sadd_new_set(self):
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$7\r\nmyset\r\n$5\r\nvalue1\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':1\r\n')
+
+    async def test_sadd_existing_set_new_member(self):
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$7\r\nmyset\r\n$5\r\nvalue1\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$7\r\nmyset\r\n$5\r\nvalue2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':1\r\n')
+
+    async def test_sadd_existing_set_existing_member(self):
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$7\r\nmyset\r\n$5\r\nvalue1\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$7\r\nmyset\r\n$5\r\nvalue1\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':0\r\n')
+
+    async def test_sadd_multiple_members(self):
+        await write_and_drain(self.writer, b'*6\r\n$4\r\nSADD\r\n$7\r\nmyset\r\n$5\r\nvalue1\r\n$5\r\nvalue2\r\n$5\r\nvalue3\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':3\r\n')
+
+    async def test_sadd_error_when_no_members(self):
+        await write_and_drain(self.writer, b'*2\r\n$4\r\nSADD\r\n$7\r\nmyset\r\n')
+        response = await self.reader.read(100)
+        self.assertTrue(response.startswith(b'-ERR wrong number of arguments for \'sadd\' command\r\n'))
+
+    async def test_sadd_error_when_no_key(self):
+        await write_and_drain(self.writer, b'*3\r\n$4\r\nSADD\r\n')
+        response = await self.reader.read(100)
+        self.assertTrue(response.startswith(b'-ERR wrong number of arguments for \'sadd\' command\r\n'))
+
 
 class OtherCommandsTests(TestServer):
     """

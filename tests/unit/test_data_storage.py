@@ -532,6 +532,21 @@ class StreamDataStorageTests(BaseDataStorageTest):
 
         self.assertEqual(result, expected)
 
+class SetDataStorageTests(BaseDataStorageTest):
+    """
+    SADD tests
+    """
+
+    async def test_sadd_creates_set_if_it_doesnt_exist(self):
+        added_count = await self.storage.sadd("myset", ["a", "b", "c"])
+        self.assertEqual(added_count, 3)
+        self.assertEqual(self.storage.storage_dict["myset"].value, {"a", "b", "c"})
+
+    async def test_sadd_does_not_add_duplicates(self):
+        await self.storage.sadd("myset", ["a", "b", "c"])
+        added_count = await self.storage.sadd("myset", ["b", "c", "d", "e"])
+        self.assertEqual(added_count, 2) # Only d and e are new
+        self.assertEqual(self.storage.storage_dict["myset"].value, {"a", "b", "c", "d", "e"})
 
 class OtherDataStorageTests(BaseDataStorageTest):
     """
