@@ -18,7 +18,7 @@ The supported commands and their differences compared to the Redis versions are 
 
    | Command | Deviation from Redis                      |
    | ------- | ----------------------------------------- |
-   | PING    | Optional argument message not supported   |
+   | PING    | None   |
    | ECHO    | None                                      |
    | TYPE    | Only supports strings, lists, and streams |
    | EXISTS  | None                                      |
