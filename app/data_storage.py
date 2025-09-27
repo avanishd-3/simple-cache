@@ -8,8 +8,6 @@ import time
 
 import heapq
 
-logging.basicConfig(level=logging.INFO)
-
 ValueWithExpiry = namedtuple("ValueWithExpiry", ["value", "expiry_time"])
 BlockedClientFutureResult = namedtuple("BlockedClientFutureResult", ["key", "removed_item", "timestamp"])
 

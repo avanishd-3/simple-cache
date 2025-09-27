@@ -43,9 +43,9 @@ The supported commands and their differences compared to the Redis versions are 
    | Command | Deviation from Redis                                  |
    | ------- | ----------------------------------------------------- |
    | RPUSH   | None                                                  |
-   | LRANGE  | None                                                  |
    | LPUSH   | None                                                  |
    | LLEN    | None                                                  |
+   | LRANGE  | None                                                  |
    | LPOP    | None                                                  |
    | BLPOP   | Does not support blocking on multiple lists at a time |
 </details>
