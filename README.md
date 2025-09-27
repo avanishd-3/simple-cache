@@ -47,7 +47,7 @@ The supported commands and their differences compared to the Redis versions are 
    | LLEN    | None                                                  |
    | LRANGE  | None                                                  |
    | LPOP    | None                                                  |
-   | BLPOP   | Does not support blocking on multiple lists at a time |
+   | BLPOP   | Does not support blocking on multiple lists at a time<br><br>Timeout is 0 if not specified |
 </details>
 
 <details>
