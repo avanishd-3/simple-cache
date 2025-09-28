@@ -681,3 +681,34 @@ class DataStorage():
 
             logging.info(f"Set difference for keys {keys}: {result_set}")
             return result_set
+        
+    async def sinter(self, keys: list) -> set:
+        """
+        Return intersection of all sets.
+
+        If the first set does not exist, return an empty set.
+
+        Assumes keys has at least one element b/c command handler checks for this
+        """
+
+        async with self.lock:
+
+            first_key = keys[0]
+            first_set_item = self.storage_dict.get(first_key, None)
+            if first_set_item is None or not isinstance(first_set_item.value, set):
+                logging.info(f"First key not found or not a set: {first_key}")
+                return set() # RESP specification returns empty array for this
+
+            result_set: set = first_set_item.value.copy()
+
+            for key in keys[1:]:
+                item = self.storage_dict.get(key, None)
+                if item is not None and isinstance(item.value, set):
+                    result_set.intersection_update(item.value)
+                else:
+                    # If any set doesn't exist, intersection is empty set
+                    logging.info(f"Key not found or not a set: {key}, intersection is empty set")
+                    return set()
+
+            logging.info(f"Set intersection for keys {keys}: {result_set}")
+            return result_set

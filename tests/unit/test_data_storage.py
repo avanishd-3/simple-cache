@@ -534,7 +534,7 @@ class StreamDataStorageTests(BaseDataStorageTest):
 
 class SetDataStorageTests(BaseDataStorageTest):
     """
-    SADD, SCARD, SDIFF tests
+    SADD, SCARD, SDIFF, SINTER tests
     """
 
     async def test_sadd_creates_set_if_it_doesnt_exist(self):
@@ -582,6 +582,31 @@ class SetDataStorageTests(BaseDataStorageTest):
         await self.storage.sadd("myset", ["a", "b", "c"])
         await self.storage.set_overwrite("myset", set(["x", "y"]))
         self.assertEqual(self.storage.storage_dict["myset"].value, {"x", "y"})
+
+    async def test_sinter_basic(self):
+        await self.storage.sadd("key1", ["a", "b", "c", "d"])
+        await self.storage.sadd("key2", ["c"])
+        await self.storage.sadd("key3", ["a", "c", "e"])
+
+        result = await self.storage.sinter(["key1", "key2", "key3"])
+        self.assertEqual(result, {"c"})
+
+    async def sinter_on_one_key(self):
+        await self.storage.sadd("key1", ["a", "b", "c", "d"])
+        result = await self.storage.sinter(["key1"])
+        self.assertEqual(result, {"a", "b", "c", "d"})
+
+    async def test_sinter_first_key_non_existent(self):
+        await self.storage.sadd("key2", ["a", "b"])
+        await self.storage.sadd("key3", ["b", "c"])
+        result = await self.storage.sinter(["nope", "key2", "key3"])
+        self.assertEqual(result, set())
+
+    async def test_sinter_non_first_key_non_existent(self):
+        await self.storage.sadd("key2", ["a", "b"])
+        await self.storage.sadd("key3", ["b", "c"])
+        result = await self.storage.sinter(["key2", "nope", "key3"])
+        self.assertEqual(result, set())
 
 class OtherDataStorageTests(BaseDataStorageTest):
     """
