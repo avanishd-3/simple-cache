@@ -534,7 +534,9 @@ class StreamDataStorageTests(BaseDataStorageTest):
 
 class SetDataStorageTests(BaseDataStorageTest):
     """
-    SADD, SCARD, SDIFF, SINTER tests
+    SADD, SCARD, SDIFF, SINTER, SUNION tests
+
+    Also tests for set_overwrite helper function
     """
 
     async def test_sadd_creates_set_if_it_doesnt_exist(self):
@@ -607,6 +609,24 @@ class SetDataStorageTests(BaseDataStorageTest):
         await self.storage.sadd("key3", ["b", "c"])
         result = await self.storage.sinter(["key2", "nope", "key3"])
         self.assertEqual(result, set())
+
+    async def test_sunion_basic(self):
+        await self.storage.sadd("key1", ["a", "b", "c", "d"])
+        await self.storage.sadd("key2", ["c"])
+        await self.storage.sadd("key3", ["a", "c", "e"])
+
+        result = await self.storage.sunion(["key1", "key2", "key3"])
+        self.assertEqual(result, {"a", "b", "c", "d", "e"})
+
+    async def test_sunion_first_key_non_existent(self):
+        await self.storage.sadd("key2", ["a", "b"])
+        result = await self.storage.sunion(["nope", "key2"])
+        self.assertEqual(result, {"a", "b"})
+
+    async def test_sunion_non_first_key_non_existent(self):
+        await self.storage.sadd("key1", ["a", "b"])
+        result = await self.storage.sunion(["key1", "nope"])
+        self.assertEqual(result, {"a", "b"})
 
 class OtherDataStorageTests(BaseDataStorageTest):
     """

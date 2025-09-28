@@ -383,7 +383,7 @@ class StreamTests(TestServer):
 
 class SetTests(TestServer):
     """
-    Test SADD, SCARD, SDIFF commands
+    Test SADD, SCARD, SDIFF, SDIFFSTORE, SINTER, SINTERSTORE, SUNION commands
     """
 
     async def test_sadd_new_set(self):
@@ -510,6 +510,18 @@ class SetTests(TestServer):
         await write_and_drain(self.writer, b'*3\r\n$5\r\nSCARD\r\n$7\r\ndestset\r\n')
         response = await self.reader.read(100)
         self.assertEqual(response, b':1\r\n')
+
+    async def test_sunion_error_when_no_keys(self):
+        await write_and_drain(self.writer, b'*1\r\n$5\r\nSUNION\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'sunion\' command\r\n')
+
+    async def test_sunion_existent_and_non_existent_keys(self):
+        await write_and_drain(self.writer, b'*6\r\n$4\r\nSADD\r\n$4\r\nkey1\r\n$5\r\nvalue1\r\n$5\r\nvalue2\r\n$5\r\nvalue3\r\n')
+        await self.reader.read(100)
+        await write_and_drain(self.writer, b'*3\r\n$5\r\nSUNION\r\n$4\r\nkey1\r\n$4\r\nkey2\r\n')
+        response = await self.reader.read(300)
+        self.assertEqual(response, b'*3\r\n$6\r\nvalue1\r\n$6\r\nvalue2\r\n$6\r\nvalue3\r\n')
 
 class OtherCommandsTests(TestServer):
     """

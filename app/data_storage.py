@@ -714,3 +714,20 @@ class DataStorage():
 
             logging.info(f"Set intersection for keys {keys}: {result_set}")
             return result_set
+        
+    async def sunion(self, keys: list) -> set:
+        """
+        Return union of all sets. Non-existent keys are treated as empty sets (so they are ignored).
+        """
+
+        async with self.lock:
+
+            result_set: set = set()
+
+            for key in keys:
+                item = self.storage_dict.get(key, None)
+                if item is not None and isinstance(item.value, set):
+                    result_set.update(item.value)
+
+            logging.info(f"Set union for keys {keys}: {result_set}")
+            return result_set

@@ -31,7 +31,7 @@ async def handle_set_commands(
         "SDIFFSTORE": _handle_sdiff_store,
         "SINTER": _handle_sinter,
         "SINTERSTORE": _handle_sinter_store,
-        # "SUNION": _handle_sunion,
+        "SUNION": _handle_sunion,
         # "SUNIONSTORE": _handle_sunionstore,
         # "SISMEMBER": _handle_sismember,
         # "SMEMBERS": _handle_smembers,
@@ -223,3 +223,33 @@ async def _handle_sinter_store(writer: asyncio.StreamWriter, args: list, storage
         await write_and_drain(writer, format_integer_success(0))
     else:
         await write_and_drain(writer, format_integer_success(len(intersection_members)))
+
+async def _handle_sunion(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+    """
+    Handles the SUNION command.
+
+    SUNION returns the members of the set resulting from the union of all the sets.
+        If the key does not exist, it is considered an empty set.
+
+    Args:
+        writer (asyncio.StreamWriter): The StreamWriter to write the response to.
+        args (list): The arguments provided.
+        storage (DataStorage): The DataStorage instance to interact with.
+    """
+    args_len: int = len(args)
+
+    if args_len < 1:
+        await write_and_drain(writer, format_simple_error("ERR wrong number of arguments for 'sunion' command"))
+        return
+
+    # Get all keys to perform the union operation on
+    keys: list = args # All args
+
+    logging.info(f"SUNION: {keys}")
+
+    union_members = await storage.sunion(keys)
+
+    if not union_members:
+        await write_and_drain(writer, format_resp_array([])) # No members in set
+    else:
+        await write_and_drain(writer, format_resp_array(union_members))
