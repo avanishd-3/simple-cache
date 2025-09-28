@@ -7,6 +7,7 @@ from typing import Any, Type
 import time
 
 import heapq
+from copy import deepcopy
 
 ValueWithExpiry = namedtuple("ValueWithExpiry", ["value", "expiry_time"])
 BlockedClientFutureResult = namedtuple("BlockedClientFutureResult", ["key", "removed_item", "timestamp"])
@@ -672,7 +673,8 @@ class DataStorage():
                 logging.info(f"First key not found or not a set: {first_key}")
                 return set() # RESP specification returns empty array for this
 
-            result_set: set = first_set_item.value.copy()
+            # Makes sure insertion order is preserved
+            result_set: set = deepcopy(first_set_item.value)
 
             for key in keys[1:]:
                 item = self.storage_dict.get(key, None)
