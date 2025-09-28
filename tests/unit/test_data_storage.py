@@ -5,6 +5,7 @@ import time
 from unittest.mock import Mock, patch
 
 from app.data_storage import DataStorage
+from app.utils.ordered_set import OrderedSet
 
 from typing import Type
 
@@ -80,6 +81,11 @@ class BasicDataStorageTests(BaseDataStorageTest):
         await self.storage.xadd("mystream", "1-0", {"field1": "value1"})
         key_type = await self.storage.key_type("mystream")
         self.assertEqual(key_type, Type[dict])
+
+    async def test_type_of_set_key(self):
+        await self.storage.sadd("myset", ["member1", "member2"])
+        key_type = await self.storage.key_type("myset")
+        self.assertEqual(key_type, Type[OrderedSet])
 
     async def test_exists_with_existing_key(self):
         await self.storage.set("existent", "yes")

@@ -129,13 +129,9 @@ class DataStorage():
             return key in self.storage_dict
         
     # TODO: Add support for set, zset, hash, stream
-    async def key_type(self, key: str) -> Type[None | str | list]:
+    async def key_type(self, key: str) -> Type[None | str | list | dict | OrderedSet]:
         """
         Return type of key
-
-        Redis types: string, list, set, zset, hash, stream
-
-        Currently supported types: string, list
         """
         async with self.lock:
             item = self.storage_dict.get(key, None)
@@ -151,6 +147,9 @@ class DataStorage():
             elif isinstance(item.value, dict):
                 logging.info(f"Key '{key}' is of type stream")
                 return Type[dict]
+            elif isinstance(item.value, OrderedSet):
+                logging.info(f"Key '{key}' is of type set")
+                return Type[OrderedSet]
             else:
                 logging.info(f"Key '{key}' is of unknown type")
                 return Type[None]

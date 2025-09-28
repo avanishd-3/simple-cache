@@ -208,6 +208,13 @@ class BasicCommandsTests(TestServer):
         response = await self.reader.read(100)
         self.assertEqual(response, b'+stream\r\n')
 
+    async def test_type_set(self):
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$6\r\nmyset\r\n$7\r\nmember1\r\n$7\r\nmember2\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*2\r\n$4\r\nTYPE\r\n$5\r\nmyset\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'+set\r\n')
+
     async def test_exists_with_existing_key(self):
         await write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nexistent\r\n$3\r\nyes\r\n')
         _ = await self.reader.read(100)

@@ -12,6 +12,7 @@ from app.format_response import (
 )
 from app.data_storage import DataStorage
 from app.utils.writer_utils import write_and_drain
+from app.utils.ordered_set import OrderedSet
 
 
 async def handle_basic_commands(
@@ -92,7 +93,7 @@ async def _handle_type(writer: asyncio.StreamWriter, args: list, storage: DataSt
     """
     key: str = args[0] if len(args) > 0 else ""
 
-    key_type: Type[None | str | list] = await storage.key_type(key)
+    key_type: Type[None | str | list | dict | OrderedSet] = await storage.key_type(key)
 
     logging.info(f"TYPE: {key} is of type {key_type}")
 
@@ -108,6 +109,9 @@ async def _handle_type(writer: asyncio.StreamWriter, args: list, storage: DataSt
     elif key_type is Type[dict]:
         logging.info(f"Sent TYPE stream for key {key}")
         writer.write(format_simple_string("stream"))
+    elif key_type is Type[OrderedSet]:
+        logging.info(f"Sent TYPE set for key {key}")
+        writer.write(format_simple_string("set"))
     else: # TODO: Remove this when type is fully implemented
         logging.info(f"Sent TYPE unknown for key {key}")
         writer.write(format_simple_string("unknown"))
