@@ -7,7 +7,10 @@ from typing import Any, Type
 import time
 
 import heapq
-from copy import deepcopy
+from copy import copy
+
+# Internal imports
+from app.utils.ordered_set import OrderedSet
 
 ValueWithExpiry = namedtuple("ValueWithExpiry", ["value", "expiry_time"])
 BlockedClientFutureResult = namedtuple("BlockedClientFutureResult", ["key", "removed_item", "timestamp"])
@@ -631,10 +634,10 @@ class DataStorage():
         """
         async with self.lock:
             if key not in self.storage_dict:
-                self.storage_dict[key] = ValueWithExpiry(set(), None)
+                self.storage_dict[key] = ValueWithExpiry(OrderedSet(), None)
                 logging.info(f"Created new set for key: {key}")
 
-            accessed_set: set = self.storage_dict[key].value
+            accessed_set: OrderedSet = self.storage_dict[key].value
             initial_size: int = len(accessed_set)
             accessed_set.update(members) # Duplicate members are ignored
             logging.info(f"Added {members} to set {key}")
@@ -650,14 +653,14 @@ class DataStorage():
         """
         async with self.lock:
             item = self.storage_dict.get(key, None)
-            if item is not None and isinstance(item.value, set):
+            if item is not None and isinstance(item.value, OrderedSet):
                 logging.info(f"Retrieved cardinality for key '{key}': {len(item.value)}")
                 return len(item.value)
             else:
                 logging.info(f"Key not found or not a set: {key}")
                 return 0
             
-    async def sdiff(self, keys: list) -> set:
+    async def sdiff(self, keys: list) -> OrderedSet:
         """
         Return the members of the set resulting from the difference between the first set and all the successive sets.
 
@@ -669,22 +672,21 @@ class DataStorage():
         async with self.lock:
             first_key = keys[0]
             first_set_item = self.storage_dict.get(first_key, None)
-            if first_set_item is None or not isinstance(first_set_item.value, set):
+            if first_set_item is None or not isinstance(first_set_item.value, OrderedSet):
                 logging.info(f"First key not found or not a set: {first_key}")
-                return set() # RESP specification returns empty array for this
+                return OrderedSet()  # RESP specification returns empty array for this
 
-            # Makes sure insertion order is preserved
-            result_set: set = deepcopy(first_set_item.value)
+            result_set: OrderedSet = copy(first_set_item.value)
 
             for key in keys[1:]:
                 item = self.storage_dict.get(key, None)
-                if item is not None and isinstance(item.value, set):
+                if item is not None and isinstance(item.value, OrderedSet):
                     result_set.difference_update(item.value)
 
             logging.info(f"Set difference for keys {keys}: {result_set}")
             return result_set
         
-    async def sinter(self, keys: list) -> set:
+    async def sinter(self, keys: list) -> OrderedSet:
         """
         Return intersection of all sets.
 
@@ -697,36 +699,36 @@ class DataStorage():
 
             first_key = keys[0]
             first_set_item = self.storage_dict.get(first_key, None)
-            if first_set_item is None or not isinstance(first_set_item.value, set):
+            if first_set_item is None or not isinstance(first_set_item.value, OrderedSet):
                 logging.info(f"First key not found or not a set: {first_key}")
-                return set() # RESP specification returns empty array for this
+                return OrderedSet()  # RESP specification returns empty array for this
 
-            result_set: set = first_set_item.value.copy()
+            result_set: OrderedSet = copy(first_set_item.value)
 
             for key in keys[1:]:
                 item = self.storage_dict.get(key, None)
-                if item is not None and isinstance(item.value, set):
+                if item is not None and isinstance(item.value, OrderedSet):
                     result_set.intersection_update(item.value)
                 else:
                     # If any set doesn't exist, intersection is empty set
                     logging.info(f"Key not found or not a set: {key}, intersection is empty set")
-                    return set()
+                    return OrderedSet()
 
             logging.info(f"Set intersection for keys {keys}: {result_set}")
             return result_set
         
-    async def sunion(self, keys: list) -> set:
+    async def sunion(self, keys: list) -> OrderedSet:
         """
         Return union of all sets. Non-existent keys are treated as empty sets (so they are ignored).
         """
 
         async with self.lock:
 
-            result_set: set = set()
+            result_set: OrderedSet = OrderedSet()
 
             for key in keys:
                 item = self.storage_dict.get(key, None)
-                if item is not None and isinstance(item.value, set):
+                if item is not None and isinstance(item.value, OrderedSet):
                     result_set.update(item.value)
 
             logging.info(f"Set union for keys {keys}: {result_set}")

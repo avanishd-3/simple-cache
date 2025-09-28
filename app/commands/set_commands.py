@@ -11,6 +11,7 @@ from app.format_response import (
 )
 from app.data_storage import DataStorage
 from app.utils.writer_utils import write_and_drain
+from app.utils.ordered_set import OrderedSet
 
 async def handle_set_commands(
     writer: asyncio.StreamWriter, command: str, args: list, storage: DataStorage
@@ -70,7 +71,7 @@ async def _handle_sadd(writer: asyncio.StreamWriter, args: list, storage: DataSt
 
     logging.info(f"SADD: {key} = {set_members}")
 
-    added_count = await storage.sadd(key, set_members)
+    added_count: int = await storage.sadd(key, set_members)
 
     await write_and_drain(writer, format_integer_success(added_count))
 
@@ -96,7 +97,7 @@ async def _handle_scard(writer: asyncio.StreamWriter, args: list, storage: DataS
 
     logging.info(f"SCARD: {key}")
 
-    cardinality = await storage.scard(key)
+    cardinality: int = await storage.scard(key)
 
     await write_and_drain(writer, format_integer_success(cardinality))
 
@@ -123,7 +124,7 @@ async def _handle_sdiff(writer: asyncio.StreamWriter, args: list, storage: DataS
 
     logging.info(f"SDIFF: {keys}")
 
-    difference_members = await storage.sdiff(keys)
+    difference_members: OrderedSet = await storage.sdiff(keys)
 
     if not difference_members:
         await write_and_drain(writer, format_resp_array([])) # No members in set
@@ -153,7 +154,7 @@ async def _handle_sdiff_store(writer: asyncio.StreamWriter, args: list, storage:
 
     logging.info(f"SDIFFSTORE: {keys}")
 
-    difference_members: set = await storage.sdiff(keys)
+    difference_members: OrderedSet = await storage.sdiff(keys)
     await storage.set_overwrite(destination, difference_members)
 
     # RESP returns the number of members in the resulting set
@@ -185,7 +186,7 @@ async def _handle_sinter(writer: asyncio.StreamWriter, args: list, storage: Data
 
     logging.info(f"SINTER: {keys}")
 
-    intersection_members = await storage.sinter(keys)
+    intersection_members: OrderedSet= await storage.sinter(keys)
 
     if not intersection_members:
         await write_and_drain(writer, format_resp_array([])) # No members in set
@@ -215,7 +216,7 @@ async def _handle_sinter_store(writer: asyncio.StreamWriter, args: list, storage
 
     logging.info(f"SINTERSTORE: {keys}")
 
-    intersection_members: set = await storage.sinter(keys)
+    intersection_members: OrderedSet = await storage.sinter(keys)
     await storage.set_overwrite(destination, intersection_members)
 
     # RESP returns the number of members in the resulting set
@@ -247,7 +248,7 @@ async def _handle_sunion(writer: asyncio.StreamWriter, args: list, storage: Data
 
     logging.info(f"SUNION: {keys}")
 
-    union_members = await storage.sunion(keys)
+    union_members: OrderedSet = await storage.sunion(keys)
 
     if not union_members:
         await write_and_drain(writer, format_resp_array([])) # No members in set
