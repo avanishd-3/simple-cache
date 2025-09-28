@@ -30,8 +30,7 @@ async def handle_set_commands(
         "SDIFF": _handle_sdiff,
         "SDIFFSTORE": _handle_sdiff_store,
         "SINTER": _handle_sinter,
-        # "SINTERCARD": _handle_sintercard,
-        # "SINTERSTORE": _handle_sinterstore,
+        "SINTERSTORE": _handle_sinter_store,
         # "SUNION": _handle_sunion,
         # "SUNIONSTORE": _handle_sunionstore,
         # "SISMEMBER": _handle_sismember,
@@ -192,3 +191,35 @@ async def _handle_sinter(writer: asyncio.StreamWriter, args: list, storage: Data
         await write_and_drain(writer, format_resp_array([])) # No members in set
     else:
         await write_and_drain(writer, format_resp_array(intersection_members))
+
+async def _handle_sinter_store(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+    """
+    Handles the SINTERSTORE command.
+
+    SINTERSTORE is SINTER but stores the result in specified destination. If destination already exists, it is overwritten.
+
+    Args:
+        writer (asyncio.StreamWriter): The StreamWriter to write the response to.
+        args (list): The arguments provided.
+        storage (DataStorage): The DataStorage instance to interact with.
+    """
+    args_len: int = len(args)
+
+    if args_len < 2:
+        await write_and_drain(writer, format_simple_error("ERR wrong number of arguments for 'sinterstore' command"))
+        return
+
+    # Get all keys to perform the difference operation on
+    destination: str = args[0] # First arg is destination
+    keys: list = args[1:] # All args after destination
+
+    logging.info(f"SINTERSTORE: {keys}")
+
+    intersection_members: set = await storage.sinter(keys)
+    await storage.set_overwrite(destination, intersection_members)
+
+    # RESP returns the number of members in the resulting set
+    if not intersection_members:
+        await write_and_drain(writer, format_integer_success(0))
+    else:
+        await write_and_drain(writer, format_integer_success(len(intersection_members)))

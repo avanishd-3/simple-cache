@@ -493,6 +493,24 @@ class SetTests(TestServer):
         response = await self.reader.read(300)
         self.assertEqual(response, b'*1\r\n$6\r\nvalue2\r\n')
 
+    async def test_sinter_store_error_when_no_keys(self):
+        await write_and_drain(self.writer, b'*2\r\n$5\r\nSINTERSTORE\r\n$7\r\ndestset\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'sinterstore\' command\r\n')
+
+    async def test_sinter_store_new_set(self):
+        await write_and_drain(self.writer, b'*6\r\n$4\r\nSADD\r\n$4\r\nkey1\r\n$5\r\nvalue1\r\n$5\r\nvalue2\r\n$5\r\nvalue3\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$4\r\nkey2\r\n$5\r\nvalue2\r\n$5\r\nvalue4\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*4\r\n$10\r\nSINTERSTORE\r\n$7\r\ndestset\r\n$4\r\nkey1\r\n$4\r\nkey2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':1\r\n')  # 1 member in the resulting set
+        # Verify contents of destset
+        await write_and_drain(self.writer, b'*3\r\n$5\r\nSCARD\r\n$7\r\ndestset\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':1\r\n')
+
 class OtherCommandsTests(TestServer):
     """
     Test FLUSHDB and SHUTDOWN commands
