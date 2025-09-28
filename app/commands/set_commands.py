@@ -27,6 +27,7 @@ async def handle_set_commands(
     commands_dict: dict = {
         "SADD": _handle_sadd,
         "SCARD": _handle_scard,
+        "SDIFF": _handle_sdiff,
     }
     handler = commands_dict.get(command.upper())
     if handler:
@@ -89,3 +90,33 @@ async def _handle_scard(writer: asyncio.StreamWriter, args: list, storage: DataS
     cardinality = await storage.scard(key)
 
     await write_and_drain(writer, format_integer_success(cardinality))
+
+async def _handle_sdiff(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+    """
+    Handles the SDIFF command.
+
+    SDIFF returns the members of the set resulting from the difference between the first set and all the successive sets.
+        If the key does not exist, it is considered an empty set.
+
+    Args:
+        writer (asyncio.StreamWriter): The StreamWriter to write the response to.
+        args (list): The arguments provided.
+        storage (DataStorage): The DataStorage instance to interact with.
+    """
+    args_len: int = len(args)
+
+    if args_len < 1:
+        await write_and_drain(writer, format_simple_error("ERR wrong number of arguments for 'sdiff' command"))
+        return
+
+    # Get all keys to perform the difference operation on
+    keys: list = args # All args
+
+    logging.info(f"SDIFF: {keys}")
+
+    difference_members = await storage.sdiff(keys)
+
+    if not difference_members:
+        await write_and_drain(writer, format_resp_array([])) # No members in set
+    else:
+        await write_and_drain(writer, format_resp_array(difference_members))

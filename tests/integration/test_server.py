@@ -383,7 +383,7 @@ class StreamTests(TestServer):
 
 class SetTests(TestServer):
     """
-    Test SADD, SCARD commands
+    Test SADD, SCARD, SDIFF commands
     """
 
     async def test_sadd_new_set(self):
@@ -436,6 +436,25 @@ class SetTests(TestServer):
         await write_and_drain(self.writer, b'*2\r\n$5\r\nSCARD\r\n')
         response = await self.reader.read(100)
         self.assertEqual(response, b'-ERR wrong number of arguments for \'scard\' command\r\n')
+
+    async def test_sdiff_error_when_no_keys(self):
+        await write_and_drain(self.writer, b'*1\r\n$5\r\nSDIFF\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'sdiff\' command\r\n')
+
+    async def test_sdiff_non_existent_keys(self):
+        await write_and_drain(self.writer, b'*3\r\n$5\r\nSDIFF\r\n$3\r\nkey1\r\n$3\r\nkey2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'*0\r\n')
+
+    async def test_sdiff_existing_keys(self):
+        await write_and_drain(self.writer, b'*6\r\n$4\r\nSADD\r\n$4\r\nkey1\r\n$5\r\nvalue1\r\n$5\r\nvalue2\r\n$5\r\nvalue3\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$4\r\nkey2\r\n$5\r\nvalue2\r\n$5\r\nvalue4\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*3\r\n$5\r\nSDIFF\r\n$4\r\nkey1\r\n$4\r\nkey2\r\n')
+        response = await self.reader.read(300)
+        self.assertEqual(response, b'*2\r\n$6\r\nvalue1\r\n$6\r\nvalue3\r\n')
 
 class OtherCommandsTests(TestServer):
     """

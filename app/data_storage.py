@@ -643,3 +643,29 @@ class DataStorage():
             else:
                 logging.info(f"Key not found or not a set: {key}")
                 return 0
+            
+    async def sdiff(self, keys: list) -> set:
+        """
+        Return the members of the set resulting from the difference between the first set and all the successive sets.
+
+        If the first set does not exist, return an empty set.
+
+        Assumes keys has at least one element b/c command handler checks for this
+        """
+
+        async with self.lock:
+            first_key = keys[0]
+            first_set_item = self.storage_dict.get(first_key, None)
+            if first_set_item is None or not isinstance(first_set_item.value, set):
+                logging.info(f"First key not found or not a set: {first_key}")
+                return set() # RESP specification returns empty array for this
+
+            result_set: set = first_set_item.value.copy()
+
+            for key in keys[1:]:
+                item = self.storage_dict.get(key, None)
+                if item is not None and isinstance(item.value, set):
+                    result_set.difference_update(item.value)
+
+            logging.info(f"Set difference for keys {keys}: {result_set}")
+            return result_set

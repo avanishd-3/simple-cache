@@ -534,7 +534,7 @@ class StreamDataStorageTests(BaseDataStorageTest):
 
 class SetDataStorageTests(BaseDataStorageTest):
     """
-    SADD, SCARD tests
+    SADD, SCARD, SDIFF tests
     """
 
     async def test_sadd_creates_set_if_it_doesnt_exist(self):
@@ -556,6 +556,23 @@ class SetDataStorageTests(BaseDataStorageTest):
         await self.storage.sadd("myset", ["a", "b", "c"])
         count = await self.storage.scard("myset")
         self.assertEqual(count, 3)
+
+    async def test_sdiff_non_existent_keys(self):
+        result = await self.storage.sdiff(["nope", "a", "b"])
+        self.assertEqual(result, set())
+
+    async def test_sdiff_when_first_key_non_existent_and_others_exist(self):
+        await self.storage.sadd("set2", ["a", "b"])
+        result = await self.storage.sdiff(["nope", "set2"])
+        self.assertEqual(result, set())
+
+    async def test_sdiff_existing_sets(self):
+        await self.storage.sadd("key1", ["a", "b", "c", "d"])
+        await self.storage.sadd("key2", ["c"])
+        await self.storage.sadd("key3", ["a", "c", "e"])
+
+        result = await self.storage.sdiff(["key1", "key2", "key3"])
+        self.assertEqual(result, {"b", "d"})
 
 class OtherDataStorageTests(BaseDataStorageTest):
     """
