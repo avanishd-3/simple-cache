@@ -628,3 +628,18 @@ class DataStorage():
 
             # Return number of new elements added to the set
             return len(accessed_set) - initial_size
+        
+    async def scard(self, key: str) -> int:
+        """
+        Return the set cardinality (number of elements) of the set stored at key.
+
+        If the key does not exist, return 0.
+        """
+        async with self.lock:
+            item = self.storage_dict.get(key, None)
+            if item is not None and isinstance(item.value, set):
+                logging.info(f"Retrieved cardinality for key '{key}': {len(item.value)}")
+                return len(item.value)
+            else:
+                logging.info(f"Key not found or not a set: {key}")
+                return 0

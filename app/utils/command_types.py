@@ -5,4 +5,4 @@ BASIC_COMMANDS: set[Literal["PING", "ECHO", "TYPE", "EXISTS", "DEL"]] = {"PING",
 STRING_COMMANDS: set[Literal["SET", "GET"]] = {"SET", "GET"}
 LIST_COMMANDS: set[Literal["RPUSH", "LPUSH", "LLEN", "LRANGE", "LPOP", "BLPOP"]] = {"RPUSH", "LPUSH", "LLEN", "LRANGE", "LPOP", "BLPOP"}
 STREAM_COMMANDS: set[Literal["XADD", "XRANGE"]] = {"XADD", "XRANGE"}
-SET_COMMANDS: set[Literal["SADD"]] = {"SADD"}
+SET_COMMANDS: set[Literal["SADD", "SCARD"]] = {"SADD", "SCARD"}

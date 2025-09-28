@@ -383,7 +383,7 @@ class StreamTests(TestServer):
 
 class SetTests(TestServer):
     """
-    Test SADD command
+    Test SADD, SCARD commands
     """
 
     async def test_sadd_new_set(self):
@@ -413,13 +413,29 @@ class SetTests(TestServer):
     async def test_sadd_error_when_no_members(self):
         await write_and_drain(self.writer, b'*2\r\n$4\r\nSADD\r\n$7\r\nmyset\r\n')
         response = await self.reader.read(100)
-        self.assertTrue(response.startswith(b'-ERR wrong number of arguments for \'sadd\' command\r\n'))
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'sadd\' command\r\n')
 
     async def test_sadd_error_when_no_key(self):
         await write_and_drain(self.writer, b'*3\r\n$4\r\nSADD\r\n')
         response = await self.reader.read(100)
-        self.assertTrue(response.startswith(b'-ERR wrong number of arguments for \'sadd\' command\r\n'))
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'sadd\' command\r\n')
 
+    async def test_scard_non_existent_set(self):
+        await write_and_drain(self.writer, b'*3\r\n$5\r\nSCARD\r\n$7\r\nnoset\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':0\r\n')
+
+    async def test_scard_existing_set(self):
+        await write_and_drain(self.writer, b'*6\r\n$4\r\nSADD\r\n$7\r\nmyset\r\n$5\r\nvalue1\r\n$5\r\nvalue2\r\n$5\r\nvalue3\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*3\r\n$5\r\nSCARD\r\n$7\r\nmyset\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':3\r\n')
+
+    async def test_scard_error_when_no_key(self):
+        await write_and_drain(self.writer, b'*2\r\n$5\r\nSCARD\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'scard\' command\r\n')
 
 class OtherCommandsTests(TestServer):
     """

@@ -26,6 +26,7 @@ async def handle_set_commands(
     """
     commands_dict: dict = {
         "SADD": _handle_sadd,
+        "SCARD": _handle_scard,
     }
     handler = commands_dict.get(command.upper())
     if handler:
@@ -47,7 +48,7 @@ async def _handle_sadd(writer: asyncio.StreamWriter, args: list, storage: DataSt
         storage (DataStorage): The DataStorage instance to interact with.
     """
     args_len: int = len(args)
-    
+
     if args_len < 2:
         await write_and_drain(writer, format_simple_error("ERR wrong number of arguments for 'sadd' command"))
         return
@@ -62,3 +63,29 @@ async def _handle_sadd(writer: asyncio.StreamWriter, args: list, storage: DataSt
     added_count = await storage.sadd(key, set_members)
 
     await write_and_drain(writer, format_integer_success(added_count))
+
+async def _handle_scard(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+    """
+    Handles the SCARD command.
+
+    SCARD returns the set cardinality (number of elements) of the set stored at key.
+        If the key does not exist, return0 is returned.
+
+    Args:
+        writer (asyncio.StreamWriter): The StreamWriter to write the response to.
+        args (list): The arguments provided.
+        storage (DataStorage): The DataStorage instance to interact with.
+    """
+    args_len: int = len(args)
+
+    if args_len != 1:
+        await write_and_drain(writer, format_simple_error("ERR wrong number of arguments for 'scard' command"))
+        return
+
+    key: str = args[0]
+
+    logging.info(f"SCARD: {key}")
+
+    cardinality = await storage.scard(key)
+
+    await write_and_drain(writer, format_integer_success(cardinality))
