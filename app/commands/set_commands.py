@@ -28,6 +28,7 @@ async def handle_set_commands(
         "SADD": _handle_sadd,
         "SCARD": _handle_scard,
         "SDIFF": _handle_sdiff,
+        "SDIFFSTORE": _handle_sdiff_store,
     }
     handler = commands_dict.get(command.upper())
     if handler:
@@ -120,3 +121,35 @@ async def _handle_sdiff(writer: asyncio.StreamWriter, args: list, storage: DataS
         await write_and_drain(writer, format_resp_array([])) # No members in set
     else:
         await write_and_drain(writer, format_resp_array(difference_members))
+
+async def _handle_sdiff_store(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+    """
+    Handles the SDIFFSTORE command.
+
+    SDIFFSTORE is SDIFF but stores the result in specified destination. If destination already exists, it is overwritten.
+
+    Args:
+        writer (asyncio.StreamWriter): The StreamWriter to write the response to.
+        args (list): The arguments provided.
+        storage (DataStorage): The DataStorage instance to interact with.
+    """
+    args_len: int = len(args)
+
+    if args_len < 2:
+        await write_and_drain(writer, format_simple_error("ERR wrong number of arguments for 'sdiffstore' command"))
+        return
+
+    # Get all keys to perform the difference operation on
+    destination: str = args[0] # First arg is destination
+    keys: list = args[1:] # All args after destination
+
+    logging.info(f"SDIFF: {keys}")
+
+    difference_members: set = await storage.sdiff(keys)
+    await storage.set_overwrite(destination, difference_members)
+
+    # RESP returns the number of members in the resulting set
+    if not difference_members:
+        await write_and_drain(writer, format_integer_success(0))
+    else:
+        await write_and_drain(writer, format_integer_success(len(difference_members)))

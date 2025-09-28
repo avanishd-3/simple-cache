@@ -574,6 +574,15 @@ class SetDataStorageTests(BaseDataStorageTest):
         result = await self.storage.sdiff(["key1", "key2", "key3"])
         self.assertEqual(result, {"b", "d"})
 
+    async def test_set_overwrite_new_set_key(self):
+        await self.storage.set_overwrite("myset", set(["a", "b"]))
+        self.assertEqual(self.storage.storage_dict["myset"].value, {"a", "b"})
+
+    async def test_set_overwrite_existing_set_key(self):
+        await self.storage.sadd("myset", ["a", "b", "c"])
+        await self.storage.set_overwrite("myset", set(["x", "y"]))
+        self.assertEqual(self.storage.storage_dict["myset"].value, {"x", "y"})
+
 class OtherDataStorageTests(BaseDataStorageTest):
     """
     FLUSHDB tests

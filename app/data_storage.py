@@ -608,6 +608,18 @@ class DataStorage():
 
     ############################################### Sets ####################################################
 
+    async def set_overwrite(self, key: str, members: set) -> None:
+        """
+        Overwrite the set at the specified key with the provided members.
+
+        Create the set with these members if it doesn't exist.
+
+        Note: This is only used for sdiffstore to overwrite the destination set.
+        """
+        async with self.lock:
+            self.storage_dict[key] = ValueWithExpiry(members, None)
+            logging.info(f"Overwrote set for key {key} with members {members}")
+
     async def sadd(self, key: str, members: list) -> int:
         """
         Add one or more members to a set stored at the specified key.
