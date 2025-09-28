@@ -143,7 +143,7 @@ async def _handle_sdiff_store(writer: asyncio.StreamWriter, args: list, storage:
     destination: str = args[0] # First arg is destination
     keys: list = args[1:] # All args after destination
 
-    logging.info(f"SDIFF: {keys}")
+    logging.info(f"SDIFFSTORE: {keys}")
 
     difference_members: set = await storage.sdiff(keys)
     await storage.set_overwrite(destination, difference_members)
