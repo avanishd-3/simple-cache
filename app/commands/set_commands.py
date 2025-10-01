@@ -34,7 +34,7 @@ async def handle_set_commands(
         "SINTERSTORE": _handle_sinter_store,
         "SUNION": _handle_sunion,
         "SUNIONSTORE": _handle_sunion_store,
-        # "SISMEMBER": _handle_sismember,
+        "SISMEMBER": _handle_sismember,
         # "SMEMBERS": _handle_smembers,
         # "SMOVE": _handle_smove,
         # "SREM": _handle_srem,
@@ -285,3 +285,34 @@ async def _handle_sunion_store(writer: asyncio.StreamWriter, args: list, storage
         await write_and_drain(writer, format_integer_success(0))
     else:
         await write_and_drain(writer, format_integer_success(len(union_members)))
+
+async def _handle_sismember(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+    """
+    Handles the SISMEMBER command.
+
+    SISMEMBER returns if member is a member of the set stored at key.
+        Returns 1 if the element is a member of the set.
+        Returns 0 if the element is not a member of the set, or if key does not exist.
+
+    Args:
+        writer (asyncio.StreamWriter): The StreamWriter to write the response to.
+        args (list): The arguments provided.
+        storage (DataStorage): The DataStorage instance to interact with.
+    """
+    args_len: int = len(args)
+
+    if args_len != 2:
+        await write_and_drain(writer, format_simple_error("ERR wrong number of arguments for 'sismember' command"))
+        return
+
+    key: str = args[0]
+    member: str = args[1]
+
+    logging.info(f"SISMEMBER: {key}, {member}")
+
+    set: bool = await storage.get(key)
+
+    if set and isinstance(set, OrderedSet) and member in set:
+        await write_and_drain(writer, format_integer_success(1))
+    else:
+        await write_and_drain(writer, format_integer_success(0))

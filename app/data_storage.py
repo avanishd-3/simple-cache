@@ -190,7 +190,7 @@ class DataStorage():
         async with self.lock:
             self.storage_dict[key] = ValueWithExpiry(value, expiry_time)
 
-    async def get(self, key: str) -> str | None:
+    async def get(self, key: str) -> str | list | dict | OrderedSet | None:
         async with self.lock:
             # Do passive check: Delete expired keys when they are accessed
 

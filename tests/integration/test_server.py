@@ -569,6 +569,37 @@ class SetTests(TestServer):
         response = await self.reader.read(100)
         self.assertEqual(response, b':3\r\n')  # Should still be 3 unique members
 
+    async def test_sismember_error_when_no_key(self):
+        await write_and_drain(self.writer, b'*1\r\n$9\r\nSISMEMBER\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'sismember\' command\r\n')
+
+    async def test_sismember_non_existent_key(self):
+        await write_and_drain(self.writer, b'*3\r\n$9\r\nSISMEMBER\r\n$7\r\nnoset\r\n$5\r\nvalue\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':0\r\n')
+
+    async def test_sismember_string_key(self):
+        await write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*3\r\n$9\r\nSISMEMBER\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':0\r\n')
+
+    async def test_sismember_true(self):
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$7\r\nmyset\r\n$5\r\nvalue1\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*3\r\n$9\r\nSISMEMBER\r\n$7\r\nmyset\r\n$5\r\nvalue1\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':1\r\n')
+
+    async def test_sismember_false(self):
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$7\r\nmyset\r\n$5\r\nvalue1\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*3\r\n$9\r\nSISMEMBER\r\n$7\r\nmyset\r\n$5\r\nvalue2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':0\r\n')
+
 class OtherCommandsTests(TestServer):
     """
     Test FLUSHDB and SHUTDOWN commands
