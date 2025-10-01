@@ -35,7 +35,7 @@ async def handle_set_commands(
         "SUNION": _handle_sunion,
         "SUNIONSTORE": _handle_sunion_store,
         "SISMEMBER": _handle_sismember,
-        # "SMEMBERS": _handle_smembers,
+        "SMEMBERS": _handle_smembers,
         # "SMOVE": _handle_smove,
         # "SREM": _handle_srem,
     }
@@ -316,3 +316,32 @@ async def _handle_sismember(writer: asyncio.StreamWriter, args: list, storage: D
         await write_and_drain(writer, format_integer_success(1))
     else:
         await write_and_drain(writer, format_integer_success(0))
+
+async def _handle_smembers(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+    """
+    Handles the SMEMBERS command.
+
+    SMEMBERS returns all the members of the set value stored at key.
+        If the key does not exist, an empty set is returned.
+
+    Args:
+        writer (asyncio.StreamWriter): The StreamWriter to write the response to.
+        args (list): The arguments provided.
+        storage (DataStorage): The DataStorage instance to interact with.
+    """
+    args_len: int = len(args)
+
+    if args_len != 1:
+        await write_and_drain(writer, format_simple_error("ERR wrong number of arguments for 'smembers' command"))
+        return
+
+    key: str = args[0]
+
+    logging.info(f"SMEMBERS: {key}")
+
+    set_members: OrderedSet = await storage.get(key)
+
+    if not set_members or not isinstance(set_members, OrderedSet):
+        await write_and_drain(writer, format_resp_array([])) # No members in set or key does not exist/is not a set
+    else:
+        await write_and_drain(writer, format_resp_array(set_members))

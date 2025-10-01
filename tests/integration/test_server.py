@@ -600,6 +600,23 @@ class SetTests(TestServer):
         response = await self.reader.read(100)
         self.assertEqual(response, b':0\r\n')
 
+    async def test_smembers_error_when_no_key(self):
+        await write_and_drain(self.writer, b'*1\r\n$8\r\nSMEMBERS\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'smembers\' command\r\n')
+
+    async def test_smembers_non_existent_key(self):
+        await write_and_drain(self.writer, b'*2\r\n$7\r\nSMEMBERS\r\n$7\r\nnoset\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'*0\r\n')
+
+    async def test_smembers_existing_key(self):
+        await write_and_drain(self.writer, b'*6\r\n$4\r\nSADD\r\n$7\r\nmyset\r\n$5\r\nvalue1\r\n$5\r\nvalue2\r\n$5\r\nvalue3\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*2\r\n$7\r\nSMEMBERS\r\n$7\r\nmyset\r\n')
+        response = await self.reader.read(300)
+        self.assertEqual(response, b'*3\r\n$6\r\nvalue1\r\n$6\r\nvalue2\r\n$6\r\nvalue3\r\n')
+
 class OtherCommandsTests(TestServer):
     """
     Test FLUSHDB and SHUTDOWN commands
