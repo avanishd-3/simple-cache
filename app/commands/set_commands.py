@@ -292,7 +292,7 @@ async def _handle_sismember(writer: asyncio.StreamWriter, args: list, storage: D
 
     SISMEMBER returns if member is a member of the set stored at key.
         Returns 1 if the element is a member of the set.
-        Returns 0 if the element is not a member of the set, or if key does not exist.
+        Returns 0 if the element is not a member of the set, or if key does not exist or is not a set.
 
     Args:
         writer (asyncio.StreamWriter): The StreamWriter to write the response to.
