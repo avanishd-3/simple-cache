@@ -310,7 +310,7 @@ async def _handle_sismember(writer: asyncio.StreamWriter, args: list, storage: D
 
     logging.info(f"SISMEMBER: {key}, {member}")
 
-    set: bool = await storage.get(key)
+    set: OrderedSet = await storage.get(key)
 
     if set and isinstance(set, OrderedSet) and member in set:
         await write_and_drain(writer, format_integer_success(1))
