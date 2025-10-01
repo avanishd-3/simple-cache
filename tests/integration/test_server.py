@@ -530,6 +530,45 @@ class SetTests(TestServer):
         response = await self.reader.read(300)
         self.assertEqual(response, b'*3\r\n$6\r\nvalue1\r\n$6\r\nvalue2\r\n$6\r\nvalue3\r\n')
 
+    async def test_sunion_store_error_when_no_keys(self):
+        await write_and_drain(self.writer, b'*2\r\n$11\r\nSUNIONSTORE\r\n$7\r\ndestset\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'sunionstore\' command\r\n')
+
+    async def test_sunion_store_error_when_no_destination(self):
+        await write_and_drain(self.writer, b'*3\r\n$11\r\nSUNIONSTORE\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'sunionstore\' command\r\n')
+
+    async def test_sunion_store_new_key(self):
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$4\r\nset1\r\n$5\r\nvalue1\r\n$5\r\nvalue2\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$4\r\nset2\r\n$5\r\nvalue2\r\n$5\r\nvalue3\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*5\r\n$11\r\nSUNIONSTORE\r\n$6\r\ndestset\r\n$4\r\nset1\r\n$4\r\nset2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':3\r\n')  # 3 unique members in the resulting set
+        # Verify contents of destset
+        await write_and_drain(self.writer, b'*3\r\n$5\r\nSCARD\r\n$7\r\ndestset\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':3\r\n')
+
+    async def test_sunion_store_existing_key(self):
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$4\r\nset1\r\n$5\r\nvalue1\r\n$5\r\nvalue2\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$4\r\nset2\r\n$5\r\nvalue2\r\n$5\r\nvalue3\r\n')
+        _ = await self.reader.read(100)
+        # Create destset with some initial members
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$7\r\ndestset\r\n$5\r\nvalue0\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*5\r\n$11\r\nSUNIONSTORE\r\n$7\r\ndestset\r\n$4\r\nset1\r\n$4\r\nset2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':3\r\n')  # 3 unique members in the resulting set
+        # Verify contents of destset
+        await write_and_drain(self.writer, b'*3\r\n$5\r\nSCARD\r\n$7\r\ndestset\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':3\r\n')  # Should still be 3 unique members
+
 class OtherCommandsTests(TestServer):
     """
     Test FLUSHDB and SHUTDOWN commands

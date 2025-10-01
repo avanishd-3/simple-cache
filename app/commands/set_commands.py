@@ -33,7 +33,7 @@ async def handle_set_commands(
         "SINTER": _handle_sinter,
         "SINTERSTORE": _handle_sinter_store,
         "SUNION": _handle_sunion,
-        # "SUNIONSTORE": _handle_sunionstore,
+        "SUNIONSTORE": _handle_sunion_store,
         # "SISMEMBER": _handle_sismember,
         # "SMEMBERS": _handle_smembers,
         # "SMOVE": _handle_smove,
@@ -254,3 +254,34 @@ async def _handle_sunion(writer: asyncio.StreamWriter, args: list, storage: Data
         await write_and_drain(writer, format_resp_array([])) # No members in set
     else:
         await write_and_drain(writer, format_resp_array(union_members))
+
+async def _handle_sunion_store(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+    """
+    Handles the SUNIONSTORE command.
+
+    SUNIONSTORE is SUNION but stores the result in specified destination. If destination already exists, it is overwritten.
+
+    Args:
+        writer (asyncio.StreamWriter): The StreamWriter to write the response to.
+        args (list): The arguments provided.
+        storage (DataStorage): The DataStorage instance to interact with.
+    """
+    args_len: int = len(args)
+
+    if args_len < 2:
+        await write_and_drain(writer, format_simple_error("ERR wrong number of arguments for 'sunionstore' command"))
+        return
+
+    # Get all keys to perform the union operation on
+    destination: str = args[0] # First arg is destination
+    keys: list = args[1:] # All args after destination
+
+    logging.info(f"SUNIONSTORE: {keys}")
+
+    union_members: OrderedSet = await storage.sunion(keys)
+    await storage.set_overwrite(destination, union_members)
+
+    if not union_members:
+        await write_and_drain(writer, format_integer_success(0))
+    else:
+        await write_and_drain(writer, format_integer_success(len(union_members)))
