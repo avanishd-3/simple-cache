@@ -4,7 +4,7 @@ import time
 
 from unittest.mock import Mock, patch
 
-from app.data_storage import DataStorage
+from app.data_storage import DataStorage, WrongTypeError
 from app.utils.ordered_set import OrderedSet
 
 from typing import Type
@@ -668,8 +668,28 @@ class SetDataStorageTests(BaseDataStorageTest):
         self.assertTrue(result)
         self.assertEqual(self.storage.storage_dict["source"].value, {"b"})
         self.assertEqual(self.storage.storage_dict["dest"].value, {"a"})
-        
-    
+
+    async def test_srem_error_when_key_exists_and_not_a_set(self):
+        await self.storage.set("notaset", "value")
+        with self.assertRaises(WrongTypeError):
+            await self.storage.srem("notaset", ["value"])
+
+    async def test_srem_zero_on_non_existent_key(self):
+        removed_count = await self.storage.srem("nope", ["a", "b"])
+        self.assertEqual(removed_count, 0)
+
+    async def test_srem_zero_when_members_not_in_set(self):
+        await self.storage.sadd("myset", ["a", "b", "c"])
+        removed_count = await self.storage.srem("myset", ["x", "y"])
+        self.assertEqual(removed_count, 0)
+        self.assertEqual(self.storage.storage_dict["myset"].value, {"a", "b", "c"})
+
+    async def test_srem_some_members_removed(self):
+        await self.storage.sadd("myset", ["a", "b", "c", "d"])
+        removed_count = await self.storage.srem("myset", ["b", "d", "x"])
+        self.assertEqual(removed_count, 2) # b and d removed, x not in set
+        self.assertEqual(self.storage.storage_dict["myset"].value, {"a", "c"})
+
 class OtherDataStorageTests(BaseDataStorageTest):
     """
     FLUSHDB tests

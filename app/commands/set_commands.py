@@ -3,15 +3,14 @@ import logging
 
 # Internal imports
 from app.format_response import (
-    format_bulk_string_success,
     format_integer_success,
     format_resp_array,
-    format_null_bulk_string,
     format_simple_error,
 )
 from app.data_storage import DataStorage
 from app.utils.writer_utils import write_and_drain
 from app.utils.ordered_set import OrderedSet
+from app.data_storage import WrongTypeError
 
 async def handle_set_commands(
     writer: asyncio.StreamWriter, command: str, args: list, storage: DataStorage
@@ -37,7 +36,7 @@ async def handle_set_commands(
         "SISMEMBER": _handle_sismember,
         "SMEMBERS": _handle_smembers,
         "SMOVE": _handle_smove,
-        # "SREM": _handle_srem,
+        "SREM": _handle_srem,
     }
     handler = commands_dict.get(command.upper())
     if handler:
@@ -377,3 +376,36 @@ async def _handle_smove(writer: asyncio.StreamWriter, args: list, storage: DataS
         await write_and_drain(writer, format_integer_success(1))
     else:
         await write_and_drain(writer, format_integer_success(0))
+
+async def _handle_srem(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+    """
+    Handles the SREM command.
+
+    SREM removes the specified members from the set stored at key.
+        If the member is not a member of the set, it is ignored.
+        If key does not exist, it is treated as an empty set and 0 is returned.
+        Return error when value stored at key is not a set.
+        
+    Args:
+        writer (asyncio.StreamWriter): The StreamWriter to write the response to.
+        args (list): The arguments provided.
+        storage (DataStorage): The DataStorage instance to interact with.
+    """
+    args_len: int = len(args)
+
+    if args_len != 2:
+        await write_and_drain(writer, format_simple_error("ERR wrong number of arguments for 'srem' command"))
+        return
+
+    key: str = args[0]
+    members: list[str] = args[1:]
+
+    logging.info(f"SREM: {key}, {members}")
+
+    try:
+        removed_count: int = await storage.srem(key, members)
+    except WrongTypeError as e:
+       await write_and_drain(writer, format_simple_error(str(e)))
+       return
+
+    await write_and_drain(writer, format_integer_success(removed_count))

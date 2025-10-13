@@ -15,6 +15,10 @@ from app.utils.ordered_set import OrderedSet
 ValueWithExpiry = namedtuple("ValueWithExpiry", ["value", "expiry_time"])
 BlockedClientFutureResult = namedtuple("BlockedClientFutureResult", ["key", "removed_item", "timestamp"])
 
+class WrongTypeError(TypeError):
+    def __init__(self):
+        super().__init__("ERR WRONGTYPE Operation against a key holding the wrong kind of value")
+
 class DataStorage():
     """
     Stores all data and provides concurrent-safe data access
@@ -769,3 +773,27 @@ class DataStorage():
             else:
                 logging.info(f"Member {member} not found in source set, not moved")
                 return False
+            
+    async def srem(self, key: str, members: list) -> int:
+        """
+        Remove one or more members from a set stored at the specified key.
+
+        Return the number of members that were removed from the set, not including non-existing members.
+        """
+        async with self.lock:
+            item = self.storage_dict.get(key, None)
+            if item is None:
+                logging.info(f"Key not found: {key}")
+                return 0  # RESP specification returns 0 for this
+            elif not isinstance(item.value, OrderedSet):
+                logging.info(f"Key not a set: {key}")
+                raise WrongTypeError()  # RESP specification returns error for this
+
+            accessed_set: OrderedSet = item.value
+            initial_size: int = len(accessed_set)
+            for member in members:
+                accessed_set.remove(member)
+            logging.info(f"Removed {members} from set {key}")
+
+            # Return number of elements removed from the set
+            return initial_size - len(accessed_set)
