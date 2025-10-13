@@ -634,6 +634,42 @@ class SetDataStorageTests(BaseDataStorageTest):
         result = await self.storage.sunion(["key1", "nope"])
         self.assertEqual(result, {"a", "b"})
 
+    async def test_smove_source_not_a_set(self):
+        await self.storage.set("notaset", "value")
+        await self.storage.sadd("destset", ["a", "b"])
+        result = await self.storage.smove("notaset", "destset", "value")
+        self.assertFalse(result)
+
+    async def test_smove_destination_not_a_set(self):
+        await self.storage.set("notaset", "value")
+        await self.storage.sadd("source", ["a", "b"])
+        result = await self.storage.smove("source", "notaset", "value")
+        self.assertFalse(result)
+
+    async def test_smove_member_not_in_source_set(self):
+        await self.storage.sadd("source", ["a", "b"])
+        await self.storage.sadd("dest", ["x", "y"])
+        result = await self.storage.smove("source", "dest", "c") # c not in source
+        self.assertFalse(result)
+        self.assertEqual(self.storage.storage_dict["source"].value, {"a", "b"})
+        self.assertEqual(self.storage.storage_dict["dest"].value, {"x", "y"})
+
+    async def test_smove_member_in_source_set(self):
+        await self.storage.sadd("source", ["a", "b"])
+        await self.storage.sadd("dest", ["x", "y"])
+        result = await self.storage.smove("source", "dest", "a") # a is in source
+        self.assertTrue(result)
+        self.assertEqual(self.storage.storage_dict["source"].value, {"b"})
+        self.assertEqual(self.storage.storage_dict["dest"].value, {"x", "y", "a"})
+
+    async def test_smove_destination_set_does_not_exist(self):
+        await self.storage.sadd("source", ["a", "b"])
+        result = await self.storage.smove("source", "dest", "a") # dest does not exist
+        self.assertTrue(result)
+        self.assertEqual(self.storage.storage_dict["source"].value, {"b"})
+        self.assertEqual(self.storage.storage_dict["dest"].value, {"a"})
+        
+    
 class OtherDataStorageTests(BaseDataStorageTest):
     """
     FLUSHDB tests

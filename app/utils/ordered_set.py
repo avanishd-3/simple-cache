@@ -12,7 +12,7 @@ class OrderedSet:
         self.items: dict = dict()
         self.item_set = set()
 
-    def _add(self, item):
+    def add(self, item):
         """
         Add an item to the ordered set if it's not already present.
         """
@@ -20,7 +20,7 @@ class OrderedSet:
             self.items[item] = None
             self.item_set.add(item)
 
-    def _discard(self, item):
+    def remove(self, item):
         """
         Remove an item from the ordered set if it exists."""
         if item in self.item_set:
@@ -32,14 +32,14 @@ class OrderedSet:
         Same as regular set update, adds all items from the iterable to the set.
         """
         for item in items:
-            self._add(item)
+            self.add(item)
 
     def difference_update(self, items: Iterable):
         """
         Same as regular set difference_update, removes all items in the iterable from the set.
         """
         for item in items:
-            self._discard(item)
+            self.remove(item)
 
     def intersection_update(self, items: Iterable):
         """
@@ -48,7 +48,7 @@ class OrderedSet:
         items_to_keep = set(items)
         for item in list(self.items.keys()):
             if item not in items_to_keep:
-                self._discard(item)
+                self.remove(item)
 
     def __contains__(self, item):
         return item in self.item_set

@@ -617,6 +617,36 @@ class SetTests(TestServer):
         response = await self.reader.read(300)
         self.assertEqual(response, b'*3\r\n$6\r\nvalue1\r\n$6\r\nvalue2\r\n$6\r\nvalue3\r\n')
 
+    async def test_smove_error_when_no_keys(self):
+        await write_and_drain(self.writer, b'*1\r\n$5\r\nSMOVE\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'smove\' command\r\n')
+
+    async def test_smove_error_when_only_source_key(self):
+        await write_and_drain(self.writer, b'*2\r\n$5\r\nSMOVE\r\n$7\r\nmyset\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'smove\' command\r\n')
+
+    async def test_smove_error_when_only_source_and_destination_keys(self):
+        await write_and_drain(self.writer, b'*3\r\n$5\r\nSMOVE\r\n$7\r\nmyset\r\n$9\r\ndestset\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'smove\' command\r\n')
+
+    async def test_smove_basic(self):
+        await write_and_drain(self.writer, b'*6\r\n$4\r\nSADD\r\n$7\r\nmyset\r\n$5\r\nvalue1\r\n$5\r\nvalue2\r\n$5\r\nvalue3\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*4\r\n$5\r\nSMOVE\r\n$7\r\nmyset\r\n$9\r\ndestset\r\n$5\r\nvalue2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':1\r\n')  # Move successful
+        # Verify value2 is no longer in myset
+        await write_and_drain(self.writer, b'*3\r\n$9\r\nSISMEMBER\r\n$7\r\nmyset\r\n$5\r\nvalue2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':0\r\n')
+        # Verify value2 is now in destset
+        await write_and_drain(self.writer, b'*3\r\n$9\r\nSISMEMBER\r\n$7\r\ndestset\r\n$5\r\nvalue2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':1\r\n')
+
 class OtherCommandsTests(TestServer):
     """
     Test FLUSHDB and SHUTDOWN commands

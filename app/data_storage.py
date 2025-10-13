@@ -732,3 +732,40 @@ class DataStorage():
 
             logging.info(f"Set union for keys {keys}: {result_set}")
             return result_set
+        
+    async def smove(self, source: str, destination: str, member: str) -> bool:
+        """
+        Move a member from the source set to the destination set.
+
+        Return True if the element was moved, False if the element was not found in the source set.
+        """
+
+        async with self.lock:
+            try:
+                source_item = self.storage_dict.get(source, None).value
+            except AttributeError: 
+                logging.info(f"Source key not found: {source}")
+                source_item = None
+
+            try:
+                destination_item = self.storage_dict.get(destination, None).value
+            except AttributeError:
+                destination_item = None
+                logging.info(f"Destination key not found: {destination}")
+
+            # If source is not a set or doesn't exist or destination exists and is not a set, return False
+            if not isinstance(source_item, OrderedSet) or (destination_item is not None and not isinstance(destination_item, OrderedSet)):
+                 logging.info("Source or destination is not a set, cannot perform SMOVE")
+                 return False
+        
+            if member in source_item:
+                source_item.remove(member)
+                if destination_item is None:
+                    destination_item = OrderedSet()
+                    self.storage_dict[destination] = ValueWithExpiry(destination_item, None)
+                destination_item.add(member)
+                logging.info(f"Moved member {member} from source set to destination set")
+                return True
+            else:
+                logging.info(f"Member {member} not found in source set, not moved")
+                return False

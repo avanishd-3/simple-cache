@@ -36,7 +36,7 @@ async def handle_set_commands(
         "SUNIONSTORE": _handle_sunion_store,
         "SISMEMBER": _handle_sismember,
         "SMEMBERS": _handle_smembers,
-        # "SMOVE": _handle_smove,
+        "SMOVE": _handle_smove,
         # "SREM": _handle_srem,
     }
     handler = commands_dict.get(command.upper())
@@ -345,3 +345,35 @@ async def _handle_smembers(writer: asyncio.StreamWriter, args: list, storage: Da
         await write_and_drain(writer, format_resp_array([])) # No members in set or key does not exist/is not a set
     else:
         await write_and_drain(writer, format_resp_array(set_members))
+
+async def _handle_smove(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+    """
+    Handles the SMOVE command.
+
+    SMOVE moves member from the set at source to the set at destination. This operation is atomic for the other clients.
+        If the source set does not exist, no operation is performed and 0 is returned.
+        If the destination set does not exist, it is created before the operation is performed.
+        
+    Args:
+        writer (asyncio.StreamWriter): The StreamWriter to write the response to.
+        args (list): The arguments provided.
+        storage (DataStorage): The DataStorage instance to interact with.
+    """
+    args_len: int = len(args)
+
+    if args_len != 3:
+        await write_and_drain(writer, format_simple_error("ERR wrong number of arguments for 'smove' command"))
+        return
+
+    source: str = args[0]
+    destination: str = args[1]
+    member: str = args[2]
+
+    logging.info(f"SMOVE: {source}, {destination}, {member}")
+
+    moved: bool = await storage.smove(source, destination, member)
+
+    if moved:
+        await write_and_drain(writer, format_integer_success(1))
+    else:
+        await write_and_drain(writer, format_integer_success(0))
