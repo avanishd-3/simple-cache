@@ -410,7 +410,7 @@ async def _handle_sismember(
 
     logging.info(f"SISMEMBER: {key}, {member}")
 
-    set: OrderedSet = await storage.get(key)
+    set = await storage.get(key)
 
     if set and isinstance(set, OrderedSet) and member in set:
         await write_and_drain(writer, format_integer_success(1))
@@ -446,7 +446,7 @@ async def _handle_smembers(
 
     logging.info(f"SMEMBERS: {key}")
 
-    set_members: OrderedSet = await storage.get(key)
+    set_members = await storage.get(key)
 
     if not set_members:
         await write_and_drain(

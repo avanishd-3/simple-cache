@@ -11,7 +11,7 @@ from app.format_response import (
     format_simple_error,
 )
 from app.data_storage import DataStorage
-from app.utils import write_and_drain
+from app.utils import write_and_drain, WRONG_TYPE_STRING
 
 
 async def handle_string_commands(
@@ -65,16 +65,16 @@ async def _handle_set(
                 else 0
             )
 
-            expiry_time: float = time.time() + expiry_amount
+            expiry_time: float | None = time.time() + expiry_amount
 
         elif "PX" in upper_args:  # Expiry in milliseconds
-            expiry_amount: int = (
+            expiry_amount = (
                 int(args[upper_args.index("PX") + 1])
                 if (upper_args.index("PX") + 1) < len(upper_args)
                 else 0
             )
 
-            expiry_time: float = time.time() + (
+            expiry_time = time.time() + (
                 expiry_amount / 1000
             )  # Convert milliseconds to seconds
 
@@ -127,16 +127,20 @@ async def _handle_get(
         storage (DataStorage): The DataStorage instance to interact with.
     """
     key: str = args[0] if len(args) > 0 else ""
-    value: str | None = await storage.get(key)
+    value = await storage.get(key)
 
     if value is not None:
-        writer.write(format_bulk_string_success(value))
-        logging.info(f"Sent GET response: {key} = {value}")
+        if not isinstance(value, str):
+            await write_and_drain(
+                writer,
+                format_simple_error(WRONG_TYPE_STRING),
+            )
+            logging.info(f"GET: Wrong type for key {key}")
+            return
+        else:
+            await write_and_drain(writer, format_bulk_string_success(value))
+            logging.info(f"Sent GET response: {key} = {value}")
     else:
         # Should return null bulk string -> $-1\r\n
-        writer.write(
-            format_null_bulk_string()
-        )  # Null bulk string (shows key doesn't exist)
+        await write_and_drain(writer, format_null_bulk_string())
         logging.info(f"Key {key} not found")
-
-    await writer.drain()  # Flush write buffer

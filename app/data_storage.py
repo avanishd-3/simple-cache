@@ -2,7 +2,7 @@ import asyncio
 from collections import namedtuple
 import logging
 
-from typing import Any, Type
+from typing import Any, Set
 
 import time
 
@@ -33,11 +33,11 @@ class DataStorage:
     2. Lists are stored as Python lists instead of deque to improve cache performance and make indexing faster.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.storage_dict: dict[str, ValueWithExpiry] = {}
         self.lock = asyncio.Lock()
         # Is a heap
-        self.blocked_clients = {}  # key: list blocking for, value: (timestamp, future, key)
+        self.blocked_clients: dict = {}  # key: list blocking for, value: (timestamp, future, key)
 
     ############################################### Helpers ####################################################
 
@@ -158,7 +158,7 @@ class DataStorage:
             return key in self.storage_dict
 
     # TODO: Add support for set, zset, hash, stream
-    async def key_type(self, key: str) -> Type[None | str | list | dict | OrderedSet]:
+    async def key_type(self, key: str) -> type[None | str | list | dict | OrderedSet] | None:
         """
         Return type of key
         """
@@ -166,22 +166,22 @@ class DataStorage:
             item = self.storage_dict.get(key, None)
             if item is None:
                 logging.info(f"Key not found: {key}")
-                return Type[None]
+                return type(None)
             elif isinstance(item.value, str):
                 logging.info(f"Key '{key}' is of type string")
-                return Type[str]
+                return str
             elif isinstance(item.value, list):
                 logging.info(f"Key '{key}' is of type list")
-                return Type[list]
+                return list
             elif isinstance(item.value, dict):
                 logging.info(f"Key '{key}' is of type stream")
-                return Type[dict]
+                return dict
             elif isinstance(item.value, OrderedSet):
                 logging.info(f"Key '{key}' is of type set")
-                return Type[OrderedSet]
+                return OrderedSet
             else:
                 logging.info(f"Key '{key}' is of unknown type")
-                return Type[None]
+                return None
 
     async def delete(self, key: str) -> bool:
         """
@@ -365,7 +365,7 @@ class DataStorage:
                     logging.info(
                         f"End index {end} >= list length {list_len} in search for {key}, treating last item as end"
                     )
-                    end: int = list_len - 1  # Otherwise will overflow on last element
+                    end = list_len - 1  # Otherwise will overflow on last element
 
                 if end == -1:
                     # Prevents empty list when we want to include the last element and using negative indexing
@@ -375,9 +375,9 @@ class DataStorage:
                 elif start == -1:
                     # This must be the last element
                     logging.info(f"Negative start index {start} includes last element")
-                    items_to_return: list = item.value[start:]
+                    items_to_return = item.value[start:]
                 else:
-                    items_to_return: list = item.value[
+                    items_to_return = item.value[
                         start : end + 1
                     ]  # Redis treats end as inclusive
 
@@ -416,7 +416,7 @@ class DataStorage:
                 logging.info(f"Key not found or not a list: {key}")
                 return None  # RESP specification returns null bulk string for this
 
-    async def blpop(self, key: str, timeout: int = 0) -> tuple[str, list | None]:
+    async def blpop(self, key: str, timeout: int = 0) -> dict | None:
         """
         Block for specified blocking time (in seconds) until an element is available in the list.
 
@@ -726,7 +726,7 @@ class DataStorage:
 
     ############################################### Sets ####################################################
 
-    async def set_overwrite(self, key: str, members: set) -> None:
+    async def set_overwrite(self, key: str, members: Set[str] | OrderedSet) -> None:
         """
         Overwrite the set at the specified key with the provided members.
 
@@ -807,7 +807,7 @@ class DataStorage:
                 item = self.storage_dict.get(key, None)
                 if item is not None and isinstance(item.value, OrderedSet):
                     result_set.difference_update(item.value)
-                elif not isinstance(item.value, OrderedSet):
+                elif item is not None and not isinstance(item.value, OrderedSet):
                     logging.info(f"Key not a set: {key}")
                     raise WrongTypeError()  # RESP specification returns error for this
 
@@ -888,17 +888,21 @@ class DataStorage:
         """
 
         async with self.lock:
-            try:
-                source_item = self.storage_dict.get(source, None).value
-            except AttributeError:
+            source_item = self.storage_dict.get(source, None)
+            destination_item : OrderedSet | None = None
+
+            if source_item is None:
                 logging.info(f"Source key not found: {source}")
                 source_item = None
+            else:
+                source_item = source_item.value
 
-            try:
-                destination_item = self.storage_dict.get(destination, None).value
-            except AttributeError:
-                destination_item = None
+            destination_item_with_expiry = self.storage_dict.get(destination, None)
+
+            if destination_item_with_expiry is None:
                 logging.info(f"Destination key not found: {destination}")
+            else:
+                destination_item = destination_item_with_expiry.value
 
             # If source is not a set or doesn't exist or destination exists and is not a set, return False
             if not isinstance(source_item, OrderedSet):
@@ -917,6 +921,7 @@ class DataStorage:
                     self.storage_dict[destination] = ValueWithExpiry(
                         destination_item, None
                     )
+
                 destination_item.add(member)
                 logging.info(
                     f"Moved member {member} from source set to destination set"

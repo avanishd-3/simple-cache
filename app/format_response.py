@@ -1,3 +1,5 @@
+from app.utils import OrderedSet
+
 def format_simple_string(message: str) -> bytes:
     """
     Format a simple RESP string.
@@ -16,7 +18,7 @@ def format_integer_success(value: int) -> bytes:
     """
     return f":{value}\r\n".encode("utf-8")
 
-def format_resp_array(elements: list[str]) -> bytes:
+def format_resp_array(elements: list[str] | OrderedSet) -> bytes:
     """
     Return a RESP array
     """

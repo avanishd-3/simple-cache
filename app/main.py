@@ -32,7 +32,7 @@ storage_data: DataStorage = DataStorage()
 async def redis_parser(data: bytes) -> list[str]:
     # TODO: Make actual parser
 
-    logging.debug(f"Raw data received: {data}")
+    logging.debug(f"Raw data received: {data.decode('utf-8')}")
 
     command_list = data.decode().strip().split("\r\n")
 
@@ -122,7 +122,7 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                 logging.info("Handling FLUSHDB command")
 
                 # Flushing is sync by default for Redis, so copying this behaviour
-                method: Literal["SYNC", "ASYNC", ""] = args[0] if args_len > 0 else ""
+                method: Literal["SYNC", "ASYNC", ""] | str = args[0] if args_len > 0 else ""
 
                 if method == "": # So logs show when default method is used
                     logging.info("FLUSHDB with default method SYNC")

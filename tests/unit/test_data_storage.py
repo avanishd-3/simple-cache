@@ -7,8 +7,6 @@ from unittest.mock import Mock, patch
 from app.data_storage import DataStorage, WrongTypeError
 from app.utils import OrderedSet
 
-from typing import Type
-
 mock_time = Mock()
 mock_time.return_value = 1234567890.0
 
@@ -69,27 +67,27 @@ class BasicDataStorageTests(BaseDataStorageTest):
 
     async def test_type_of_nonexistent_key(self):
         key_type = await self.storage.key_type("nope")
-        self.assertEqual(key_type, Type[None])
+        self.assertEqual(key_type, type(None))
 
     async def test_type_of_string_key(self):
         await self.storage.set("mystring", "hello")
         key_type = await self.storage.key_type("mystring")
-        self.assertEqual(key_type, Type[str])
+        self.assertEqual(key_type, str)
 
     async def test_type_of_list_key(self):
         await self.storage.rpush("mylist", ["a", "b", "c"])
         key_type = await self.storage.key_type("mylist")
-        self.assertEqual(key_type, Type[list])
+        self.assertEqual(key_type, list)
 
     async def test_type_of_stream_key(self):
         await self.storage.xadd("mystream", "1-0", {"field1": "value1"})
         key_type = await self.storage.key_type("mystream")
-        self.assertEqual(key_type, Type[dict])
+        self.assertEqual(key_type, dict)
 
     async def test_type_of_set_key(self):
         await self.storage.sadd("myset", ["member1", "member2"])
         key_type = await self.storage.key_type("myset")
-        self.assertEqual(key_type, Type[OrderedSet])
+        self.assertEqual(key_type, OrderedSet)
 
     async def test_exists_with_existing_key(self):
         await self.storage.set("existent", "yes")
@@ -203,28 +201,28 @@ class ListDataStorageTests(BaseDataStorageTest):
         length = await self.storage.llen("nope")
         self.assertEqual(length, 0)
 
-    async def test_lpop_with_one_element_removal(self):
+    async def test_lpop_with_one_element_removal(self) -> None:
         await self.storage.rpush("mylist", ["a", "b", "c", "d"])
         result: str = await self.storage.lpop("mylist", 1)
         self.assertEqual(result, ["a"])
         self.assertEqual(await self.storage.llen("mylist"), 3)
 
-    async def test_lpop_with_multiple_elements_removal(self):
+    async def test_lpop_with_multiple_elements_removal(self) -> None:
         await self.storage.rpush("mylist", ["one", "two", "three", "four"])
         result: str = await self.storage.lpop("mylist", 2)
         self.assertEqual(result, ["one", "two"])
         self.assertEqual(await self.storage.llen("mylist"), 2)
 
-    async def test_lpop_with_nonexistent_key(self):
+    async def test_lpop_with_nonexistent_key(self) -> None:
         result: str = await self.storage.lpop("nope", 1)
         self.assertEqual(result, None)
 
-    async def test_lpop_with_empty_list(self):
+    async def test_lpop_with_empty_list(self) -> None:
         await self.storage.rpush("mylist", [])
         result: str = await self.storage.lpop("mylist", 1)
         self.assertEqual(result, None)
 
-    async def test_blpop_no_timeout(self):
+    async def test_blpop_no_timeout(self) -> None:
         async def blpop_task():
             result = await self.storage.blpop("mylist")
             return result
@@ -238,7 +236,7 @@ class ListDataStorageTests(BaseDataStorageTest):
         self.assertEqual(result, should_be)
         self.assertEqual(await self.storage.llen("mylist"), 0)
 
-    async def test_blpop_key_appended_before_timeout(self):
+    async def test_blpop_key_appended_before_timeout(self) -> None:
         async def blpop_task():
             result = await self.storage.blpop("mylist", timeout=1)
             return result
@@ -252,7 +250,7 @@ class ListDataStorageTests(BaseDataStorageTest):
         self.assertEqual(result, should_be)
         self.assertEqual(await self.storage.llen("mylist"), 0)
 
-    async def test_blpop_timeout_occurs(self):
+    async def test_blpop_timeout_occurs(self) -> None:
         async def blpop_task():
             result = await self.storage.blpop("mylist", timeout=0.1)
             return result
@@ -265,7 +263,7 @@ class ListDataStorageTests(BaseDataStorageTest):
         result = await task
         self.assertIsNone(result, None)
 
-    async def test_blpop_list_has_items_before_call(self):
+    async def test_blpop_list_has_items_before_call(self) -> None:
         await self.storage.rpush("mylist", ["a", "b", "c"])
 
         result = await self.storage.blpop("mylist")
@@ -273,7 +271,7 @@ class ListDataStorageTests(BaseDataStorageTest):
         self.assertEqual(result, should_be)
         self.assertEqual(await self.storage.llen("mylist"), 2)
 
-    async def test_xadd_creates_stream_if_not_exists(self):
+    async def test_xadd_creates_stream_if_not_exists(self) -> None:
         entry_id = await self.storage.xadd("mystream", "1-0", {"field1": "value1"})
         self.assertEqual(entry_id, "1-0")
         key_len: float = len(self.storage.storage_dict["mystream"].value)
@@ -281,7 +279,7 @@ class ListDataStorageTests(BaseDataStorageTest):
 
 
 class StreamDataStorageTests(BaseDataStorageTest):
-    async def test_xadd_appends_to_existing_stream(self):
+    async def test_xadd_appends_to_existing_stream(self) -> None:
         await self.storage.xadd("mystream", "1-0", {"field1": "value1"})
         entry_id = await self.storage.xadd("mystream", "1-1", {"field2": "value2"})
         self.assertEqual(entry_id, "1-1")
@@ -348,7 +346,7 @@ class StreamDataStorageTests(BaseDataStorageTest):
             str(context.exception),
         )
 
-    async def test_xadd_auto_generate_sequence_number_new_stream_with_time_0(self):
+    async def test_xadd_auto_generate_sequence_number_new_stream_with_time_0(self) -> None:
         entry_id = await self.storage.xadd("autostream", "0-*", {"field": "value"})
         self.assertEqual(entry_id, "0-1")
         key_len: float = len(self.storage.storage_dict["autostream"].value)
@@ -356,7 +354,7 @@ class StreamDataStorageTests(BaseDataStorageTest):
 
     async def test_xadd_auto_generate_sequence_number_new_stream_with_time_non_zero(
         self,
-    ):
+    ) -> None:
         entry_id = await self.storage.xadd("autostream", "5-*", {"field": "value"})
         self.assertEqual(entry_id, "5-0")
         key_len: float = len(self.storage.storage_dict["autostream"].value)
@@ -364,7 +362,7 @@ class StreamDataStorageTests(BaseDataStorageTest):
 
     async def test_xadd_auto_generate_sequence_number_existing_stream_time_non_zero(
         self,
-    ):
+    ) -> None:
         await self.storage.xadd("autostream", "0-*", {"field": "value"})
         entry_id = await self.storage.xadd("autostream", "5-*", {"field2": "value2"})
         self.assertEqual(entry_id, "5-0")
@@ -373,14 +371,14 @@ class StreamDataStorageTests(BaseDataStorageTest):
 
     async def test_xadd_auto_generate_sequence_number_existing_stream_time_same_as_last(
         self,
-    ):
+    ) -> None:
         await self.storage.xadd("autostream", "1-*", {"field": "value"})
         entry_id = await self.storage.xadd("autostream", "1-*", {"field2": "value2"})
         self.assertEqual(entry_id, "1-1")
         key_len: float = len(self.storage.storage_dict["autostream"].value)
         self.assertEqual(key_len, 2)
 
-    async def test_xadd_fully_auto_generated_id_new_stream(self):
+    async def test_xadd_fully_auto_generated_id_new_stream(self) -> None:
         entry_id = await self.storage.xadd("autostream", "*", {"field": "value"})
         # ID should be current time in milliseconds-0
         current_millis = int(time.time() * 1000)
@@ -395,7 +393,7 @@ class StreamDataStorageTests(BaseDataStorageTest):
         self.assertEqual(key_len, 1)
 
     @patch("time.time", mock_time)
-    async def test_xadd_fully_auto_generated_id_same_time_as_previous_entry(self):
+    async def test_xadd_fully_auto_generated_id_same_time_as_previous_entry(self) -> None:
         await self.storage.xadd("autostream", "*", {"field": "value"})
         entry_id = await self.storage.xadd("autostream", "*", {"field2": "value2"})
 

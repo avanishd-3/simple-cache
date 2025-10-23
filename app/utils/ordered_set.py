@@ -8,9 +8,9 @@ class OrderedSet:
 
     The item set exists for fast membership testing.
     """
-    def __init__(self):
+    def __init__(self) -> None:
         self.items: dict = dict()
-        self.item_set = set()
+        self.item_set: set = set()
 
     def add(self, item):
         """

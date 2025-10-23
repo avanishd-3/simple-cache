@@ -108,23 +108,26 @@ async def _handle_type(
     """
     key: str = args[0] if len(args) > 0 else ""
 
-    key_type: Type[None | str | list | dict | OrderedSet] = await storage.key_type(key)
+    key_type: Type[None | str | list | dict | OrderedSet] | None = await storage.key_type(key)
 
     logging.info(f"TYPE: {key} is of type {key_type}")
 
-    if key_type is Type[None]:
+    if key_type is None:
+        logging.info(f"Sent TYPE unknown for key {key}")
+        writer.write(format_simple_string("unknown"))
+    elif key_type is type(None):
         logging.info(f"Sent TYPE none for key {key}")
         writer.write(format_simple_string("none"))
-    elif key_type is Type[str]:
+    elif key_type is str:
         logging.info(f"Sent TYPE string for key {key}")
         writer.write(format_simple_string("string"))
-    elif key_type is Type[list]:
+    elif key_type is list:
         logging.info(f"Sent TYPE list for key {key}")
         writer.write(format_simple_string("list"))
-    elif key_type is Type[dict]:
+    elif key_type is dict:
         logging.info(f"Sent TYPE stream for key {key}")
         writer.write(format_simple_string("stream"))
-    elif key_type is Type[OrderedSet]:
+    elif key_type is OrderedSet:
         logging.info(f"Sent TYPE set for key {key}")
         writer.write(format_simple_string("set"))
     else:  # TODO: Remove this when type is fully implemented

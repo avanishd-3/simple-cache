@@ -186,22 +186,22 @@ async def _handle_blpop(
         storage (DataStorage): The DataStorage instance to interact with.
     """
     key: str = args[0] if len(args) > 0 else ""
-    blocking_time: float = float(args[1]) if len(args) > 1 else 0
+    blocking_time: int = int(args[1]) if len(args) > 1 else 0
 
     logging.info(f"BLPOP: {key}, blocking time: {blocking_time}")
 
     # TODO -> Use Pydantic to validate input schema
-    result: dict[str, list | None] = await storage.blpop(key, blocking_time)
+    result: dict | None = await storage.blpop(key, blocking_time)
 
     if result is None:
         # Unable to pop from specified list
         logging.info(f"BLPOP: {key} timed out after {blocking_time} seconds")
-        writer.write(format_null_bulk_string())
+        await write_and_drain(writer, format_null_bulk_string())
     else:
         # List name and removed item are array of bulk strings
-        writer.write(format_resp_array([result["list_name"], result["removed_item"]]))
+        list_name: str = result["list_name"]
+        removed_item: str = result["removed_item"]
+        await write_and_drain(writer, format_resp_array([list_name, removed_item]))
         logging.info(
-            f"BLPOP: Wrote array response for {key} -> [{result['list_name']}, {result['removed_item']}]"
+            f"BLPOP: Wrote array response for {key} -> [{list_name}, {removed_item}]"
         )
-
-    await writer.drain()  # Flush write buffer

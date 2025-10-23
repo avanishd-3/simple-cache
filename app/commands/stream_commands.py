@@ -70,14 +70,10 @@ async def _handle_xadd(
     try:
         entry_id: str = await storage.xadd(key, id, field_value_pairs)
         logging.info(f"XADD: {key}, id: {id}, field-value pairs: {field_value_pairs}")
-        writer.write(
-            format_bulk_string_success(entry_id)
-        )  # Requires bulk string response
+        await write_and_drain(writer, format_bulk_string_success(entry_id)) # Requires bulk string response
     except ValueError as e:
         logging.error(f"XADD: Error adding entry to stream {key}: {e}")
-        writer.write(format_simple_error(e))  # Error response -> Should have ERR in it
-
-    await writer.drain()  # Flush write buffer
+        await write_and_drain(writer, format_simple_error(str(e)))  # Error response -> Should have ERR in it
 
 
 async def _handle_xrange(
@@ -108,7 +104,7 @@ async def _handle_xrange(
     # Null bulk string is what Redis returns in this situation
     if count is not None and count <= 0:
         logging.info(f"XRANGE: Invalid count for {key}: {count}")
-        write_and_drain(writer, format_null_bulk_string())
+        await write_and_drain(writer, format_null_bulk_string())
         return
 
     try:
@@ -138,13 +134,11 @@ async def _handle_xrange(
                     # Entry ID (string)
                     response += format_bulk_string_success(item)
 
-        logging.info(f"XRANGE: Formatted RESP array response: {response}")
-        writer.write(response)  # RESP array response
+        logging.info(f"XRANGE: Formatted RESP array response: {response.decode('utf-8')}")
+        await write_and_drain(writer, response)  # RESP array response
         logging.info(
             f"XRANGE: Wrote array response for {key} with {len(entries)} entries"
         )
     except ValueError as e:
         logging.error(f"XRANGE: Error retrieving entries from stream {key}: {e}")
-        writer.write(format_simple_error(e))  # Error response -> Should have ERR in it
-
-    await writer.drain()  # Flush write buffer
+        await write_and_drain(writer, format_simple_error(str(e)))  # Error response -> Should have ERR in it

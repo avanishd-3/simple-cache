@@ -180,6 +180,15 @@ class StringCommandsTests(TestServer):
         response = await self.reader.read(100)
         self.assertEqual(response, b"$-1\r\n")
 
+    async def test_get_non_string_key(self):
+        await write_and_drain(
+            self.writer, b"*4\r\n$5\r\nRPUSH\r\n$6\r\nmylist\r\n$1\r\na\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b"*2\r\n$3\r\nGET\r\n$6\r\nmylist\r\n")
+        response = await self.reader.read(100)
+        self.assertEqual(response, WRONG_TYPE_STRING_BYTE_CODE)
+
 
 class BasicCommandsTests(TestServer):
     """
