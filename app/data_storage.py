@@ -7,9 +7,18 @@ from typing import Any, Type
 import time
 
 import heapq
+from copy import copy
+
+# Internal imports
+from app.utils.ordered_set import OrderedSet
+from app.utils.error_strings import WRONG_TYPE_STRING
 
 ValueWithExpiry = namedtuple("ValueWithExpiry", ["value", "expiry_time"])
 BlockedClientFutureResult = namedtuple("BlockedClientFutureResult", ["key", "removed_item", "timestamp"])
+
+class WrongTypeError(TypeError):
+    def __init__(self):
+        super().__init__(WRONG_TYPE_STRING)
 
 class DataStorage():
     """
@@ -25,6 +34,8 @@ class DataStorage():
         self.lock = asyncio.Lock()
         # Is a heap
         self.blocked_clients = {}  # key: list blocking for, value: (timestamp, future, key)
+
+    ############################################### Helpers ####################################################
         
     async def unblock_all_blocked_clients(self) -> None:
         """
@@ -85,41 +96,6 @@ class DataStorage():
             new_blocked_info = BlockedClientFutureResult(blocked_info.key, removed_item, blocked_info.timestamp)
             future.set_result(new_blocked_info)
 
-    async def exists(self, key: str) -> bool:
-        """
-        Check if a key exists in the storage.
-
-        Return True if the key exists, False otherwise.
-        """
-
-        async with self.lock:
-            return key in self.storage_dict
-
-    async def set(self, key: str, value: str, expiry_time: float | None = None) -> None:
-        async with self.lock:
-            self.storage_dict[key] = ValueWithExpiry(value, expiry_time)
-
-    async def get(self, key: str) -> str | None:
-        async with self.lock:
-            # Do passive check: Delete expired keys when they are accessed
-
-            logging.info(f"Retrieving value for key: {key}")
-
-            item = self.storage_dict.get(key, None)
-            curr_time = time.time()
-            if item is not None and item.expiry_time is not None and curr_time > item.expiry_time:
-                logging.info(f"Difference b/n curr time and expiry time: {curr_time - item.expiry_time}")
-                logging.info(f"Deleting expired key: {key}")
-                del self.storage_dict[key]
-                return None
-
-            if item is not None:
-                logging.info(f"Retrieved value for key '{key}': {item.value}")
-                return item.value
-            else:
-                logging.info(f"Key not found: {key}")
-                return None
-            
     async def get_ttl(self, key: str) -> float | None:
         """
         Get the time-to-live (TTL) for a key.
@@ -144,30 +120,23 @@ class DataStorage():
             else:
                 logging.info(f"Key not found when retrieving TTL: {key}")
                 return None
-            
-    async def delete(self, key: str) -> bool:
-        """
-        Remove the specified key.
 
-        Return True if the key was removed, False if the key did not exist.
+    ############################################### General ####################################################
+
+    async def exists(self, key: str) -> bool:
         """
+        Check if a key exists in the storage.
+
+        Return True if the key exists, False otherwise.
+        """
+
         async with self.lock:
-            if key in self.storage_dict:
-                del self.storage_dict[key]
-                logging.info(f"Deleted key: {key}")
-                return True
-            else:
-                logging.info(f"Key not found for deletion: {key}")
-                return False
-
+            return key in self.storage_dict
+        
     # TODO: Add support for set, zset, hash, stream
-    async def key_type(self, key: str) -> Type[None | str | list]:
+    async def key_type(self, key: str) -> Type[None | str | list | dict | OrderedSet]:
         """
         Return type of key
-
-        Redis types: string, list, set, zset, hash, stream
-
-        Currently supported types: string, list
         """
         async with self.lock:
             item = self.storage_dict.get(key, None)
@@ -183,9 +152,71 @@ class DataStorage():
             elif isinstance(item.value, dict):
                 logging.info(f"Key '{key}' is of type stream")
                 return Type[dict]
+            elif isinstance(item.value, OrderedSet):
+                logging.info(f"Key '{key}' is of type set")
+                return Type[OrderedSet]
             else:
                 logging.info(f"Key '{key}' is of unknown type")
                 return Type[None]
+        
+    async def delete(self, key: str) -> bool:
+        """
+        Remove the specified key.
+
+        Return True if the key was removed, False if the key did not exist.
+        """
+        async with self.lock:
+            if key in self.storage_dict:
+                del self.storage_dict[key]
+                logging.info(f"Deleted key: {key}")
+                return True
+            else:
+                logging.info(f"Key not found for deletion: {key}")
+                return False
+        
+    async def flushdb_async(self) -> None:
+        """
+        Remove all keys from the current database.
+        """
+        async with self.lock:
+            self.storage_dict.clear()
+            logging.info("Flushed all data from the database (async)")
+
+    def flushdb_sync(self) -> None:
+        """
+        Synchronous version of flushdb
+        """
+        self.storage_dict.clear()
+        logging.info("Flushed all data from the database (sync)")
+        
+    ############################################### Strings ####################################################
+
+    async def set(self, key: str, value: str, expiry_time: float | None = None) -> None:
+        async with self.lock:
+            self.storage_dict[key] = ValueWithExpiry(value, expiry_time)
+
+    async def get(self, key: str) -> str | list | dict | OrderedSet | None:
+        async with self.lock:
+            # Do passive check: Delete expired keys when they are accessed
+
+            logging.info(f"Retrieving value for key: {key}")
+
+            item = self.storage_dict.get(key, None)
+            curr_time = time.time()
+            if item is not None and item.expiry_time is not None and curr_time > item.expiry_time:
+                logging.info(f"Difference b/n curr time and expiry time: {curr_time - item.expiry_time}")
+                logging.info(f"Deleting expired key: {key}")
+                del self.storage_dict[key]
+                return None
+
+            if item is not None:
+                logging.info(f"Retrieved value for key '{key}': {item.value}")
+                return item.value
+            else:
+                logging.info(f"Key not found: {key}")
+                return None
+            
+    ############################################### Lists ####################################################
             
     async def rpush(self, key: str, items: list) -> int:
         """
@@ -393,6 +424,8 @@ class DataStorage():
 
             return None # RESP specification returns null bulk string for this
         
+    ############################################### Streams ####################################################
+        
     # TODO: Implement stream as radix trie instead of dict
     async def xadd(self, key: str, id: str, field_value_pairs: dict) -> str:
         """
@@ -580,18 +613,222 @@ class DataStorage():
             else:
                 logging.info(f"Key not found or not a stream: {key}")
                 return []
-            
-    async def flushdb_async(self) -> None:
+
+    ############################################### Sets ####################################################
+
+    async def set_overwrite(self, key: str, members: set) -> None:
         """
-        Remove all keys from the current database.
+        Overwrite the set at the specified key with the provided members.
+
+        Create the set with these members if it doesn't exist.
+
+        Note: This is only used for sdiffstore to overwrite the destination set.
         """
         async with self.lock:
-            self.storage_dict.clear()
-            logging.info("Flushed all data from the database (async)")
+            self.storage_dict[key] = ValueWithExpiry(members, None)
+            logging.info(f"Overwrote set for key {key} with members {members}")
 
-    def flushdb_sync(self) -> None:
+    async def sadd(self, key: str, members: list) -> int:
         """
-        Synchronous version of flushdb
+        Add one or more members to a set stored at the specified key.
+
+        Create the set with these members if it doesn't exist.
+
+        Return the number of elements that were added to the set, not including all the elements already present in the set.
         """
-        self.storage_dict.clear()
-        logging.info("Flushed all data from the database (sync)")
+        async with self.lock:
+            if key not in self.storage_dict:
+                self.storage_dict[key] = ValueWithExpiry(OrderedSet(), None)
+                logging.info(f"Created new set for key: {key}")
+
+            accessed_set: OrderedSet = self.storage_dict[key].value
+            initial_size: int = len(accessed_set)
+            accessed_set.update(members) # Duplicate members are ignored
+            logging.info(f"Added {members} to set {key}")
+
+            # Return number of new elements added to the set
+            return len(accessed_set) - initial_size
+        
+    async def scard(self, key: str) -> int:
+        """
+        Return the set cardinality (number of elements) of the set stored at key.
+
+        If the key does not exist, return 0.
+        If the key exists but is not a set, raise WrongTypeError.
+        """
+        async with self.lock:
+            item = self.storage_dict.get(key, None)
+            if item is not None and isinstance(item.value, OrderedSet):
+                logging.info(f"Retrieved cardinality for key '{key}': {len(item.value)}")
+                return len(item.value)
+            elif item is None:
+                logging.info(f"Key not found: {key}")
+                return 0
+            else:
+                logging.info(f"Key not a set: {key}")
+                raise WrongTypeError()  # RESP specification returns error for this
+            
+    async def sdiff(self, keys: list) -> OrderedSet:
+        """
+        Return the members of the set resulting from the difference between the first set and all the successive sets.
+
+        If the first set does not exist, return an empty set.
+
+        If any of the keys exist but are not sets, raise WrongTypeError.
+
+        Assumes keys has at least one element b/c command handler checks for this
+        """
+
+        async with self.lock:
+            first_key = keys[0]
+            first_set_item = self.storage_dict.get(first_key, None)
+            if first_set_item is None:
+                logging.info(f"First key not found: {first_key}")
+                return OrderedSet()  # RESP specification returns empty array for this
+            elif not isinstance(first_set_item.value, OrderedSet):
+                logging.info(f"First key not a set: {first_key}")
+                raise WrongTypeError()  # RESP specification returns error for this
+
+            result_set: OrderedSet = copy(first_set_item.value)
+
+            for key in keys[1:]:
+                item = self.storage_dict.get(key, None)
+                if item is not None and isinstance(item.value, OrderedSet):
+                    result_set.difference_update(item.value)
+                elif not isinstance(item.value, OrderedSet):
+                    logging.info(f"Key not a set: {key}")
+                    raise WrongTypeError()  # RESP specification returns error for this
+
+            logging.info(f"Set difference for keys {keys}: {result_set}")
+            return result_set
+        
+    async def sinter(self, keys: list) -> OrderedSet:
+        """
+        Return intersection of all sets.
+
+        If the first set does not exist, return an empty set.
+        If any of the keys exist but are not sets, raise WrongTypeError.
+
+
+        Assumes keys has at least one element b/c command handler checks for this
+        """
+
+        async with self.lock:
+
+            first_key = keys[0]
+            first_set_item = self.storage_dict.get(first_key, None)
+            if first_set_item is None:
+                logging.info(f"First key not found or not a set: {first_key}")
+                return OrderedSet()  # RESP specification returns empty array for this
+            elif not isinstance(first_set_item.value, OrderedSet):
+                logging.info(f"First key not a set: {first_key}")
+                raise WrongTypeError()  # RESP specification returns error for this
+        
+
+            result_set: OrderedSet = copy(first_set_item.value)
+
+            for key in keys[1:]:
+                item = self.storage_dict.get(key, None)
+                if item is None:
+                    # If any set doesn't exist, intersection is empty set
+                    logging.info(f"Key not found or not a set: {key}, intersection is empty set")
+                    return OrderedSet()
+                if item is not None and isinstance(item.value, OrderedSet):
+                    result_set.intersection_update(item.value)
+                elif not isinstance(item.value, OrderedSet):
+                    logging.info(f"Key not a set: {key}")
+                    raise WrongTypeError()  # RESP specification returns error for this
+
+            logging.info(f"Set intersection for keys {keys}: {result_set}")
+            return result_set
+        
+    async def sunion(self, keys: list) -> OrderedSet:
+        """
+        Return union of all sets. Non-existent keys are treated as empty sets (so they are ignored).
+        Keys that exist but are not sets raise WrongTypeError.
+        """
+
+        async with self.lock:
+
+            result_set: OrderedSet = OrderedSet()
+
+            for key in keys:
+                item = self.storage_dict.get(key, None)
+                if item is None:
+                    # Non-existent key
+                    logging.info(f"Key not found (treated as empty set): {key}")
+                    continue
+                if item is not None and isinstance(item.value, OrderedSet):
+                    result_set.update(item.value)
+                elif not isinstance(item.value, OrderedSet):
+                    logging.info(f"Key not a set: {key}")
+                    raise WrongTypeError()  # RESP specification returns error for this
+
+            logging.info(f"Set union for keys {keys}: {result_set}")
+            return result_set
+        
+    async def smove(self, source: str, destination: str, member: str) -> bool:
+        """
+        Move a member from the source set to the destination set.
+
+        Return True if the element was moved, False if the element was not found in the source set.
+
+        If the source exists but is not a set, raise WrongTypeError. (Redis only checks this)
+        """
+
+        async with self.lock:
+            try:
+                source_item = self.storage_dict.get(source, None).value
+            except AttributeError: 
+                logging.info(f"Source key not found: {source}")
+                source_item = None
+
+            try:
+                destination_item = self.storage_dict.get(destination, None).value
+            except AttributeError:
+                destination_item = None
+                logging.info(f"Destination key not found: {destination}")
+
+            # If source is not a set or doesn't exist or destination exists and is not a set, return False
+            if not isinstance(source_item, OrderedSet):
+                logging.info(f"Source key not a set: {source}")
+                raise WrongTypeError()  # RESP specification returns error for this
+            elif (destination_item is not None and not isinstance(destination_item, OrderedSet)):
+                 logging.info("Source or destination is not a set, cannot perform SMOVE")
+                 return False
+        
+            if member in source_item:
+                source_item.remove(member)
+                if destination_item is None:
+                    destination_item = OrderedSet()
+                    self.storage_dict[destination] = ValueWithExpiry(destination_item, None)
+                destination_item.add(member)
+                logging.info(f"Moved member {member} from source set to destination set")
+                return True
+            else:
+                logging.info(f"Member {member} not found in source set, not moved")
+                return False
+            
+    async def srem(self, key: str, members: list) -> int:
+        """
+        Remove one or more members from a set stored at the specified key.
+
+        Return the number of members that were removed from the set, not including non-existing members.
+        """
+        async with self.lock:
+            item = self.storage_dict.get(key, None)
+            if item is None:
+                logging.info(f"Key not found: {key}")
+                return 0  # RESP specification returns 0 for this
+            elif not isinstance(item.value, OrderedSet):
+                logging.info(f"Key not a set: {key}")
+                raise WrongTypeError()  # RESP specification returns error for this
+
+            accessed_set: OrderedSet = item.value
+            initial_size: int = len(accessed_set)
+            for member in members:
+                accessed_set.remove(member)
+            logging.info(f"Removed {members} from set {key}")
+
+            # Return number of elements removed from the set
+            return initial_size - len(accessed_set)

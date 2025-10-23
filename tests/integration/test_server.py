@@ -4,7 +4,9 @@ import time
 
 from app.main import main
 from app.utils.writer_utils import close_writer, write_and_drain
+from app.utils.error_strings import WRONG_TYPE_STRING
 
+WRONG_TYPE_STRING_BYTE_CODE = b'-' + WRONG_TYPE_STRING.encode('utf-8') + b'\r\n'
 
 
 
@@ -208,6 +210,13 @@ class BasicCommandsTests(TestServer):
         response = await self.reader.read(100)
         self.assertEqual(response, b'+stream\r\n')
 
+    async def test_type_set(self):
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$6\r\nmyset\r\n$7\r\nmember1\r\n$7\r\nmember2\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*2\r\n$4\r\nTYPE\r\n$5\r\nmyset\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'+set\r\n')
+
     async def test_exists_with_existing_key(self):
         await write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nexistent\r\n$3\r\nyes\r\n')
         _ = await self.reader.read(100)
@@ -381,6 +390,388 @@ class StreamTests(TestServer):
 
         self.assertEqual(response, should_be)
 
+class SetTests(TestServer):
+    """
+    Test SADD, SCARD, SDIFF, SDIFFSTORE, SINTER, SINTERSTORE, SUNION commands
+    """
+
+    async def test_sadd_new_set(self):
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$7\r\nmyset\r\n$5\r\nvalue1\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':1\r\n')
+
+    async def test_sadd_existing_set_new_member(self):
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$7\r\nmyset\r\n$5\r\nvalue1\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$7\r\nmyset\r\n$5\r\nvalue2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':1\r\n')
+
+    async def test_sadd_existing_set_existing_member(self):
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$7\r\nmyset\r\n$5\r\nvalue1\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$7\r\nmyset\r\n$5\r\nvalue1\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':0\r\n')
+
+    async def test_sadd_multiple_members(self):
+        await write_and_drain(self.writer, b'*6\r\n$4\r\nSADD\r\n$7\r\nmyset\r\n$5\r\nvalue1\r\n$5\r\nvalue2\r\n$5\r\nvalue3\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':3\r\n')
+
+    async def test_sadd_error_when_no_members(self):
+        await write_and_drain(self.writer, b'*2\r\n$4\r\nSADD\r\n$7\r\nmyset\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'sadd\' command\r\n')
+
+    async def test_sadd_error_when_no_key(self):
+        await write_and_drain(self.writer, b'*3\r\n$4\r\nSADD\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'sadd\' command\r\n')
+
+    async def test_scard_non_existent_set(self):
+        await write_and_drain(self.writer, b'*3\r\n$5\r\nSCARD\r\n$7\r\nnoset\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':0\r\n')
+
+    async def test_scard_existing_set(self):
+        await write_and_drain(self.writer, b'*6\r\n$4\r\nSADD\r\n$7\r\nmyset\r\n$5\r\nvalue1\r\n$5\r\nvalue2\r\n$5\r\nvalue3\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*3\r\n$5\r\nSCARD\r\n$7\r\nmyset\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':3\r\n')
+
+    async def test_scard_error_when_no_key(self):
+        await write_and_drain(self.writer, b'*2\r\n$5\r\nSCARD\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'scard\' command\r\n')
+
+    async def test_scard_error_when_key_is_string(self):
+        await write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*4\r\n$5\r\nSCARD\r\n$3\r\nkey\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, WRONG_TYPE_STRING_BYTE_CODE)
+
+    async def test_sdiff_error_when_no_keys(self):
+        await write_and_drain(self.writer, b'*1\r\n$5\r\nSDIFF\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'sdiff\' command\r\n')
+
+    async def test_sdiff_non_existent_keys(self):
+        await write_and_drain(self.writer, b'*3\r\n$5\r\nSDIFF\r\n$3\r\nkey1\r\n$3\r\nkey2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'*0\r\n')
+
+    async def test_sdiff_error_when_key_is_string(self):
+        await write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*3\r\n$5\r\nSDIFF\r\n$3\r\nkey\r\n$3\r\nkey2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, WRONG_TYPE_STRING_BYTE_CODE)
+
+    async def test_sdiff_existing_keys(self):
+        await write_and_drain(self.writer, b'*6\r\n$4\r\nSADD\r\n$4\r\nkey1\r\n$5\r\nvalue1\r\n$5\r\nvalue2\r\n$5\r\nvalue3\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$4\r\nkey2\r\n$5\r\nvalue2\r\n$5\r\nvalue4\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*3\r\n$5\r\nSDIFF\r\n$4\r\nkey1\r\n$4\r\nkey2\r\n')
+        response = await self.reader.read(300)
+        self.assertEqual(response, b'*2\r\n$6\r\nvalue1\r\n$6\r\nvalue3\r\n')
+
+    async def test_sdiff_store_error_when_no_keys(self):
+        await write_and_drain(self.writer, b'*2\r\n$5\r\nSDIFFSTORE\r\n$7\r\ndestset\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'sdiffstore\' command\r\n')
+
+    async def test_sdiff_store_error_when_non_first_key_is_string(self):
+        await write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*3\r\n$11\r\nSDIFFSTORE\r\n$3\r\nkey\r\n$3\r\nkey\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, WRONG_TYPE_STRING_BYTE_CODE)
+
+    async def test_sdiff_store_works_when_first_key_is_string(self):
+        await write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*3\r\n$11\r\nSDIFFSTORE\r\n$3\r\nkey\r\n$3\r\nkey2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':0\r\n')
+        # Verify that destset is created as an empty set
+        await write_and_drain(self.writer, b'*3\r\n$5\r\nSCARD\r\n$3\r\nkey\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':0\r\n')
+
+    async def test_sdiff_store_new_set(self):
+        await write_and_drain(self.writer, b'*6\r\n$4\r\nSADD\r\n$4\r\nkey1\r\n$5\r\nvalue1\r\n$5\r\nvalue2\r\n$5\r\nvalue3\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$4\r\nkey2\r\n$5\r\nvalue2\r\n$5\r\nvalue4\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*4\r\n$10\r\nSDIFFSTORE\r\n$7\r\ndestset\r\n$4\r\nkey1\r\n$4\r\nkey2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':2\r\n')  # 2 members in the resulting set
+        # Verify contents of destset
+        await write_and_drain(self.writer, b'*3\r\n$5\r\nSCARD\r\n$7\r\ndestset\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':2\r\n')
+
+    async def test_sinter_error_when_no_keys(self):
+        await write_and_drain(self.writer, b'*1\r\n$5\r\nSINTER\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'sinter\' command\r\n')
+
+    async def test_sinter_error_when_key_is_string(self):
+        await write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*3\r\n$6\r\nSINTER\r\n$3\r\nkey\r\n$3\r\nkey2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, WRONG_TYPE_STRING_BYTE_CODE)
+
+    async def test_sinter_non_existent_keys(self):
+        await write_and_drain(self.writer, b'*3\r\n$5\r\nSINTER\r\n$3\r\nkey1\r\n$3\r\nkey2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'*0\r\n')
+
+    async def test_sinter_existing_keys(self):
+        await write_and_drain(self.writer, b'*6\r\n$4\r\nSADD\r\n$4\r\nkey1\r\n$5\r\nvalue1\r\n$5\r\nvalue2\r\n$5\r\nvalue3\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$4\r\nkey2\r\n$5\r\nvalue2\r\n$5\r\nvalue4\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*3\r\n$5\r\nSINTER\r\n$4\r\nkey1\r\n$4\r\nkey2\r\n')
+        response = await self.reader.read(300)
+        self.assertEqual(response, b'*1\r\n$6\r\nvalue2\r\n')
+
+    async def test_sinter_store_error_when_no_keys(self):
+        await write_and_drain(self.writer, b'*2\r\n$5\r\nSINTERSTORE\r\n$7\r\ndestset\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'sinterstore\' command\r\n')
+
+    async def test_sinter_store_error_when_non_first_key_is_string(self):
+        await write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*3\r\n$11\r\nSINTERSTORE\r\n$3\r\nkey\r\n$3\r\nkey\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, WRONG_TYPE_STRING_BYTE_CODE)
+
+    async def test_sinter_store_works_when_first_key_is_string(self):
+        await write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*3\r\n$11\r\nSINTERSTORE\r\n$3\r\nkey\r\n$3\r\nkey2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':0\r\n')
+        # Verify that destset is created as an empty set
+        await write_and_drain(self.writer, b'*3\r\n$5\r\nSCARD\r\n$3\r\nkey\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':0\r\n')
+
+    async def test_sinter_store_new_set(self):
+        await write_and_drain(self.writer, b'*6\r\n$4\r\nSADD\r\n$4\r\nkey1\r\n$5\r\nvalue1\r\n$5\r\nvalue2\r\n$5\r\nvalue3\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$4\r\nkey2\r\n$5\r\nvalue2\r\n$5\r\nvalue4\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*4\r\n$10\r\nSINTERSTORE\r\n$7\r\ndestset\r\n$4\r\nkey1\r\n$4\r\nkey2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':1\r\n')  # 1 member in the resulting set
+        # Verify contents of destset
+        await write_and_drain(self.writer, b'*3\r\n$5\r\nSCARD\r\n$7\r\ndestset\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':1\r\n')
+
+    async def test_sunion_error_when_no_keys(self):
+        await write_and_drain(self.writer, b'*1\r\n$5\r\nSUNION\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'sunion\' command\r\n')
+
+    async def test_sunion_error_when_key_is_string(self):
+        await write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*3\r\n$6\r\nSUNION\r\n$3\r\nkey\r\n$3\r\nkey2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, WRONG_TYPE_STRING_BYTE_CODE)
+
+    async def test_sunion_existent_and_non_existent_keys(self):
+        await write_and_drain(self.writer, b'*6\r\n$4\r\nSADD\r\n$4\r\nkey1\r\n$5\r\nvalue1\r\n$5\r\nvalue2\r\n$5\r\nvalue3\r\n')
+        await self.reader.read(100)
+        await write_and_drain(self.writer, b'*3\r\n$5\r\nSUNION\r\n$4\r\nkey1\r\n$4\r\nkey2\r\n')
+        response = await self.reader.read(300)
+        self.assertEqual(response, b'*3\r\n$6\r\nvalue1\r\n$6\r\nvalue2\r\n$6\r\nvalue3\r\n')
+
+    async def test_sunion_store_error_when_no_keys(self):
+        await write_and_drain(self.writer, b'*2\r\n$11\r\nSUNIONSTORE\r\n$7\r\ndestset\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'sunionstore\' command\r\n')
+
+    async def test_sunion_store_works_when_first_key_is_string(self):
+        await write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*3\r\n$11\r\nSUNIONSTORE\r\n$3\r\nkey\r\n$3\r\nkey2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':0\r\n')
+        # Verify that destset is created as an empty set
+        await write_and_drain(self.writer, b'*3\r\n$5\r\nSCARD\r\n$3\r\nkey\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':0\r\n')
+
+    async def test_union_store_error_when_non_first_key_is_string(self):
+        await write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*3\r\n$11\r\nSUNIONSTORE\r\n$3\r\nkey\r\n$3\r\nkey\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, WRONG_TYPE_STRING_BYTE_CODE)
+
+    async def test_sunion_store_error_when_no_destination(self):
+        await write_and_drain(self.writer, b'*3\r\n$11\r\nSUNIONSTORE\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'sunionstore\' command\r\n')
+
+    async def test_sunion_store_new_key(self):
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$4\r\nset1\r\n$5\r\nvalue1\r\n$5\r\nvalue2\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$4\r\nset2\r\n$5\r\nvalue2\r\n$5\r\nvalue3\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*5\r\n$11\r\nSUNIONSTORE\r\n$6\r\ndestset\r\n$4\r\nset1\r\n$4\r\nset2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':3\r\n')  # 3 unique members in the resulting set
+        # Verify contents of destset
+        await write_and_drain(self.writer, b'*3\r\n$5\r\nSCARD\r\n$7\r\ndestset\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':3\r\n')
+
+    async def test_sunion_store_existing_key(self):
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$4\r\nset1\r\n$5\r\nvalue1\r\n$5\r\nvalue2\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$4\r\nset2\r\n$5\r\nvalue2\r\n$5\r\nvalue3\r\n')
+        _ = await self.reader.read(100)
+        # Create destset with some initial members
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$7\r\ndestset\r\n$5\r\nvalue0\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*5\r\n$11\r\nSUNIONSTORE\r\n$7\r\ndestset\r\n$4\r\nset1\r\n$4\r\nset2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':3\r\n')  # 3 unique members in the resulting set
+        # Verify contents of destset
+        await write_and_drain(self.writer, b'*3\r\n$5\r\nSCARD\r\n$7\r\ndestset\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':3\r\n')  # Should still be 3 unique members
+
+    async def test_sismember_error_when_no_key(self):
+        await write_and_drain(self.writer, b'*1\r\n$9\r\nSISMEMBER\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'sismember\' command\r\n')
+
+    async def test_sismember_non_existent_key(self):
+        await write_and_drain(self.writer, b'*3\r\n$9\r\nSISMEMBER\r\n$7\r\nnoset\r\n$5\r\nvalue\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':0\r\n')
+
+    async def test_sismember_string_key(self):
+        await write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*3\r\n$9\r\nSISMEMBER\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':0\r\n')
+
+    async def test_sismember_true(self):
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$7\r\nmyset\r\n$5\r\nvalue1\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*3\r\n$9\r\nSISMEMBER\r\n$7\r\nmyset\r\n$5\r\nvalue1\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':1\r\n')
+
+    async def test_sismember_false(self):
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSADD\r\n$7\r\nmyset\r\n$5\r\nvalue1\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*3\r\n$9\r\nSISMEMBER\r\n$7\r\nmyset\r\n$5\r\nvalue2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':0\r\n')
+
+    async def test_smembers_error_when_no_key(self):
+        await write_and_drain(self.writer, b'*1\r\n$8\r\nSMEMBERS\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'smembers\' command\r\n')
+
+    async def test_smembers_error_when_key_exists_but_is_not_a_set(self):
+        await write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*1\r\n$8\r\nSMEMBERS\r\n$3\r\nkey\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, WRONG_TYPE_STRING_BYTE_CODE)
+
+    async def test_smembers_non_existent_key(self):
+        await write_and_drain(self.writer, b'*2\r\n$7\r\nSMEMBERS\r\n$7\r\nnoset\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'*0\r\n')
+
+    async def test_smembers_existing_key(self):
+        await write_and_drain(self.writer, b'*6\r\n$4\r\nSADD\r\n$7\r\nmyset\r\n$5\r\nvalue1\r\n$5\r\nvalue2\r\n$5\r\nvalue3\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*2\r\n$7\r\nSMEMBERS\r\n$7\r\nmyset\r\n')
+        response = await self.reader.read(300)
+        self.assertEqual(response, b'*3\r\n$6\r\nvalue1\r\n$6\r\nvalue2\r\n$6\r\nvalue3\r\n')
+
+    async def test_smove_error_when_no_keys(self):
+        await write_and_drain(self.writer, b'*1\r\n$5\r\nSMOVE\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'smove\' command\r\n')
+
+    async def test_smove_error_when_only_source_key(self):
+        await write_and_drain(self.writer, b'*2\r\n$5\r\nSMOVE\r\n$7\r\nmyset\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'smove\' command\r\n')
+
+    async def test_smove_error_when_source_is_not_a_set(self):
+        await write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*2\r\n$5\r\nSMOVE\r\n$7\r\nmyset\r\n$3\r\nkey\r\n$3\r\nnop\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, WRONG_TYPE_STRING_BYTE_CODE)
+
+    async def test_smove_error_when_only_source_and_destination_keys(self):
+        await write_and_drain(self.writer, b'*3\r\n$5\r\nSMOVE\r\n$7\r\nmyset\r\n$9\r\ndestset\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'smove\' command\r\n')
+
+    async def test_smove_basic(self):
+        await write_and_drain(self.writer, b'*6\r\n$4\r\nSADD\r\n$7\r\nmyset\r\n$5\r\nvalue1\r\n$5\r\nvalue2\r\n$5\r\nvalue3\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*4\r\n$5\r\nSMOVE\r\n$7\r\nmyset\r\n$9\r\ndestset\r\n$5\r\nvalue2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':1\r\n')  # Move successful
+        # Verify value2 is no longer in myset
+        await write_and_drain(self.writer, b'*3\r\n$9\r\nSISMEMBER\r\n$7\r\nmyset\r\n$5\r\nvalue2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':0\r\n')
+        # Verify value2 is now in destset
+        await write_and_drain(self.writer, b'*3\r\n$9\r\nSISMEMBER\r\n$7\r\ndestset\r\n$5\r\nvalue2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':1\r\n')
+
+    async def test_srem_error_when_no_key(self):
+        await write_and_drain(self.writer, b'*1\r\n$4\r\nSREM\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'srem\' command\r\n')
+
+    async def test_srem_error_when_no_members(self):
+        await write_and_drain(self.writer, b'*2\r\n$4\r\nSREM\r\n$7\r\nmyset\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'-ERR wrong number of arguments for \'srem\' command\r\n')
+
+    async def test_srem_error_when_key_is_string(self):
+        await write_and_drain(self.writer, b'*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSREM\r\n$3\r\nkey\r\n$5\r\nvalue\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, WRONG_TYPE_STRING_BYTE_CODE)
+
+    async def test_srem_basic(self):
+        await write_and_drain(self.writer, b'*6\r\n$4\r\nSADD\r\n$7\r\nmyset\r\n$5\r\nvalue1\r\n$5\r\nvalue2\r\n$5\r\nvalue3\r\n')
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b'*4\r\n$4\r\nSREM\r\n$7\r\nmyset\r\n$5\r\nvalue2\r\n')
+        response = await self.reader.read(100)
+        self.assertEqual(response, b':1\r\n')  # Removal successful
+        # Verify members of myset
+        await write_and_drain(self.writer, b'*2\r\n$7\r\nSMEMBERS\r\n$7\r\nmyset\r\n')
+        response = await self.reader.read(300)
+        self.assertEqual(response, b'*2\r\n$6\r\nvalue1\r\n$6\r\nvalue3\r\n')
 
 class OtherCommandsTests(TestServer):
     """

@@ -4,7 +4,8 @@ import time
 
 from unittest.mock import Mock, patch
 
-from app.data_storage import DataStorage
+from app.data_storage import DataStorage, WrongTypeError
+from app.utils.ordered_set import OrderedSet
 
 from typing import Type
 
@@ -80,6 +81,11 @@ class BasicDataStorageTests(BaseDataStorageTest):
         await self.storage.xadd("mystream", "1-0", {"field1": "value1"})
         key_type = await self.storage.key_type("mystream")
         self.assertEqual(key_type, Type[dict])
+
+    async def test_type_of_set_key(self):
+        await self.storage.sadd("myset", ["member1", "member2"])
+        key_type = await self.storage.key_type("myset")
+        self.assertEqual(key_type, Type[OrderedSet])
 
     async def test_exists_with_existing_key(self):
         await self.storage.set("existent", "yes")
@@ -532,6 +538,192 @@ class StreamDataStorageTests(BaseDataStorageTest):
 
         self.assertEqual(result, expected)
 
+class SetDataStorageTests(BaseDataStorageTest):
+    """
+    SADD, SCARD, SDIFF, SINTER, SUNION tests
+
+    Also tests for set_overwrite helper function
+    """
+
+    async def test_sadd_creates_set_if_it_doesnt_exist(self):
+        added_count = await self.storage.sadd("myset", ["a", "b", "c"])
+        self.assertEqual(added_count, 3)
+        self.assertEqual(self.storage.storage_dict["myset"].value, {"a", "b", "c"})
+
+    async def test_sadd_does_not_add_duplicates(self):
+        await self.storage.sadd("myset", ["a", "b", "c"])
+        added_count = await self.storage.sadd("myset", ["b", "c", "d", "e"])
+        self.assertEqual(added_count, 2) # Only d and e are new
+        self.assertEqual(self.storage.storage_dict["myset"].value, {"a", "b", "c", "d", "e"})
+
+    async def test_scard_non_existent_key(self):
+        count = await self.storage.scard("nope")
+        self.assertEqual(count, 0)
+
+    async def test_scard_existing_set(self):
+        await self.storage.sadd("myset", ["a", "b", "c"])
+        count = await self.storage.scard("myset")
+        self.assertEqual(count, 3)
+
+    async def test_scard_error_when_existing_key_not_a_set(self):
+        await self.storage.set("notaset", "value")
+        with self.assertRaises(WrongTypeError):
+            await self.storage.scard("notaset")
+
+    async def test_sdiff_non_existent_keys(self):
+        result = await self.storage.sdiff(["nope", "a", "b"])
+        self.assertEqual(result, set())
+
+    async def test_sdiff_when_first_key_non_existent_and_others_exist(self):
+        await self.storage.sadd("set2", ["a", "b"])
+        result = await self.storage.sdiff(["nope", "set2"])
+        self.assertEqual(result, set())
+
+    async def test_sdiff_error_when_first_key_not_a_set(self):
+        await self.storage.set("notaset", "value")
+        await self.storage.sadd("set2", ["a", "b"])
+        with self.assertRaises(WrongTypeError):
+            await self.storage.sdiff(["notaset", "set2"])
+
+    async def test_sdiff_error_when_non_first_key_not_a_set(self):
+        await self.storage.sadd("set1", ["a", "b"])
+        await self.storage.set("notaset", "value")
+        with self.assertRaises(WrongTypeError):
+            await self.storage.sdiff(["set1", "notaset"])
+
+    async def test_sdiff_existing_sets(self):
+        await self.storage.sadd("key1", ["a", "b", "c", "d"])
+        await self.storage.sadd("key2", ["c"])
+        await self.storage.sadd("key3", ["a", "c", "e"])
+
+        result = await self.storage.sdiff(["key1", "key2", "key3"])
+        self.assertEqual(result, {"b", "d"})
+
+    async def test_set_overwrite_new_set_key(self):
+        await self.storage.set_overwrite("myset", set(["a", "b"]))
+        self.assertEqual(self.storage.storage_dict["myset"].value, {"a", "b"})
+
+    async def test_set_overwrite_existing_set_key(self):
+        await self.storage.sadd("myset", ["a", "b", "c"])
+        await self.storage.set_overwrite("myset", set(["x", "y"]))
+        self.assertEqual(self.storage.storage_dict["myset"].value, {"x", "y"})
+
+    async def test_sinter_basic(self):
+        await self.storage.sadd("key1", ["a", "b", "c", "d"])
+        await self.storage.sadd("key2", ["c"])
+        await self.storage.sadd("key3", ["a", "c", "e"])
+
+        result = await self.storage.sinter(["key1", "key2", "key3"])
+        self.assertEqual(result, {"c"})
+
+    async def sinter_on_one_key(self):
+        await self.storage.sadd("key1", ["a", "b", "c", "d"])
+        result = await self.storage.sinter(["key1"])
+        self.assertEqual(result, {"a", "b", "c", "d"})
+
+    async def test_sinter_first_key_non_existent(self):
+        await self.storage.sadd("key2", ["a", "b"])
+        await self.storage.sadd("key3", ["b", "c"])
+        result = await self.storage.sinter(["nope", "key2", "key3"])
+        self.assertEqual(result, set())
+
+    async def test_sinter_non_first_key_non_existent(self):
+        await self.storage.sadd("key2", ["a", "b"])
+        await self.storage.sadd("key3", ["b", "c"])
+        result = await self.storage.sinter(["key2", "nope", "key3"])
+        self.assertEqual(result, set())
+
+    async def test_sinter_error_when_first_key_not_a_set(self):
+        await self.storage.set("notaset", "value")
+        await self.storage.sadd("set2", ["a", "b"])
+        with self.assertRaises(WrongTypeError):
+            await self.storage.sinter(["notaset", "set2"])
+
+    async def test_sinter_error_when_non_first_key_not_a_set(self):
+        await self.storage.sadd("set1", ["a", "b"])
+        await self.storage.set("notaset", "value")
+        with self.assertRaises(WrongTypeError):
+            await self.storage.sinter(["set1", "notaset"])
+
+    async def test_sunion_basic(self):
+        await self.storage.sadd("key1", ["a", "b", "c", "d"])
+        await self.storage.sadd("key2", ["c"])
+        await self.storage.sadd("key3", ["a", "c", "e"])
+
+        result = await self.storage.sunion(["key1", "key2", "key3"])
+        self.assertEqual(result, {"a", "b", "c", "d", "e"})
+
+    async def test_sunion_first_key_non_existent(self):
+        await self.storage.sadd("key2", ["a", "b"])
+        result = await self.storage.sunion(["nope", "key2"])
+        self.assertEqual(result, {"a", "b"})
+
+    async def test_sunion_non_first_key_non_existent(self):
+        await self.storage.sadd("key1", ["a", "b"])
+        result = await self.storage.sunion(["key1", "nope"])
+        self.assertEqual(result, {"a", "b"})
+
+    async def test_sunion_error_when_non_first_key_not_a_set(self):
+        await self.storage.sadd("set1", ["a", "b"])
+        await self.storage.set("notaset", "value")
+        with self.assertRaises(WrongTypeError):
+            await self.storage.sunion(["set1", "notaset"])
+
+    async def test_smove_source_not_a_set(self):
+        await self.storage.set("notaset", "value")
+        await self.storage.sadd("destset", ["a", "b"])
+        with self.assertRaises(WrongTypeError):
+            await self.storage.smove("notaset", "destset", "value")
+
+    async def test_smove_destination_not_a_set(self):
+        await self.storage.set("notaset", "value")
+        await self.storage.sadd("source", ["a", "b"])
+        result = await self.storage.smove("source", "notaset", "value")
+        self.assertFalse(result)
+
+    async def test_smove_member_not_in_source_set(self):
+        await self.storage.sadd("source", ["a", "b"])
+        await self.storage.sadd("dest", ["x", "y"])
+        result = await self.storage.smove("source", "dest", "c") # c not in source
+        self.assertFalse(result)
+        self.assertEqual(self.storage.storage_dict["source"].value, {"a", "b"})
+        self.assertEqual(self.storage.storage_dict["dest"].value, {"x", "y"})
+
+    async def test_smove_member_in_source_set(self):
+        await self.storage.sadd("source", ["a", "b"])
+        await self.storage.sadd("dest", ["x", "y"])
+        result = await self.storage.smove("source", "dest", "a") # a is in source
+        self.assertTrue(result)
+        self.assertEqual(self.storage.storage_dict["source"].value, {"b"})
+        self.assertEqual(self.storage.storage_dict["dest"].value, {"x", "y", "a"})
+
+    async def test_smove_destination_set_does_not_exist(self):
+        await self.storage.sadd("source", ["a", "b"])
+        result = await self.storage.smove("source", "dest", "a") # dest does not exist
+        self.assertTrue(result)
+        self.assertEqual(self.storage.storage_dict["source"].value, {"b"})
+        self.assertEqual(self.storage.storage_dict["dest"].value, {"a"})
+
+    async def test_srem_error_when_key_exists_and_not_a_set(self):
+        await self.storage.set("notaset", "value")
+        with self.assertRaises(WrongTypeError):
+            await self.storage.srem("notaset", ["value"])
+
+    async def test_srem_zero_on_non_existent_key(self):
+        removed_count = await self.storage.srem("nope", ["a", "b"])
+        self.assertEqual(removed_count, 0)
+
+    async def test_srem_zero_when_members_not_in_set(self):
+        await self.storage.sadd("myset", ["a", "b", "c"])
+        removed_count = await self.storage.srem("myset", ["x", "y"])
+        self.assertEqual(removed_count, 0)
+        self.assertEqual(self.storage.storage_dict["myset"].value, {"a", "b", "c"})
+
+    async def test_srem_some_members_removed(self):
+        await self.storage.sadd("myset", ["a", "b", "c", "d"])
+        removed_count = await self.storage.srem("myset", ["b", "d", "x"])
+        self.assertEqual(removed_count, 2) # b and d removed, x not in set
+        self.assertEqual(self.storage.storage_dict["myset"].value, {"a", "c"})
 
 class OtherDataStorageTests(BaseDataStorageTest):
     """
