@@ -38,10 +38,14 @@ async def handle_list_commands(
         await handler(writer, args, storage)
     else:
         logging.info(f"Unknown list command: {command}")
-        await write_and_drain(writer, format_simple_error(f"ERR unknown list command: {command}"))
+        await write_and_drain(
+            writer, format_simple_error(f"ERR unknown list command: {command}")
+        )
 
 
-async def _handle_rpush(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+async def _handle_rpush(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the RPUSH command.
 
@@ -56,7 +60,7 @@ async def _handle_rpush(writer: asyncio.StreamWriter, args: list, storage: DataS
     key: str = args[0] if len(args) > 0 else ""
 
     # Get all list elements to append
-    list_elements: list = args[1:] # All args after key
+    list_elements: list = args[1:]  # All args after key
 
     logging.info(f"RPUSH: {key} = {list_elements}")
 
@@ -64,7 +68,10 @@ async def _handle_rpush(writer: asyncio.StreamWriter, args: list, storage: DataS
 
     await write_and_drain(writer, format_integer_success(list_len))
 
-async def _handle_lpush(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+
+async def _handle_lpush(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the LPUSH command.
 
@@ -79,7 +86,7 @@ async def _handle_lpush(writer: asyncio.StreamWriter, args: list, storage: DataS
     key: str = args[0] if len(args) > 0 else ""
 
     # Get all list elements to prepend
-    list_elements: list = args[1:] # All args after key
+    list_elements: list = args[1:]  # All args after key
 
     logging.info(f"LPUSH: {key} = {list_elements}")
 
@@ -87,7 +94,10 @@ async def _handle_lpush(writer: asyncio.StreamWriter, args: list, storage: DataS
 
     await write_and_drain(writer, format_integer_success(list_len))
 
-async def _handle_llen(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+
+async def _handle_llen(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the LLEN command.
 
@@ -105,7 +115,10 @@ async def _handle_llen(writer: asyncio.StreamWriter, args: list, storage: DataSt
     length: int = await storage.llen(key)
     await write_and_drain(writer, format_integer_success(length))
 
-async def _handle_lrange(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+
+async def _handle_lrange(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the LRANGE command.
 
@@ -125,7 +138,10 @@ async def _handle_lrange(writer: asyncio.StreamWriter, args: list, storage: Data
     elements = await storage.lrange(key, start, end)
     await write_and_drain(writer, format_resp_array(elements))
 
-async def _handle_lpop(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+
+async def _handle_lpop(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the LPOP command.
 
@@ -155,7 +171,10 @@ async def _handle_lpop(writer: asyncio.StreamWriter, args: list, storage: DataSt
             writer.write(format_resp_array(value))
     await writer.drain()  # Flush write buffer
 
-async def _handle_blpop(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+
+async def _handle_blpop(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the BLPOP command.
 
@@ -181,6 +200,8 @@ async def _handle_blpop(writer: asyncio.StreamWriter, args: list, storage: DataS
     else:
         # List name and removed item are array of bulk strings
         writer.write(format_resp_array([result["list_name"], result["removed_item"]]))
-        logging.info(f"BLPOP: Wrote array response for {key} -> [{result['list_name']}, {result['removed_item']}]")
+        logging.info(
+            f"BLPOP: Wrote array response for {key} -> [{result['list_name']}, {result['removed_item']}]"
+        )
 
     await writer.drain()  # Flush write buffer

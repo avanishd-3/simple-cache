@@ -39,9 +39,14 @@ async def handle_basic_commands(
         await handler(writer, args, storage)
     else:
         logging.info(f"Unknown basic command: {command}")
-        await write_and_drain(writer, format_simple_error(f"ERR unknown basic command: {command}"))
+        await write_and_drain(
+            writer, format_simple_error(f"ERR unknown basic command: {command}")
+        )
 
-async def _handle_ping(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+
+async def _handle_ping(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the PING command.
 
@@ -52,7 +57,9 @@ async def _handle_ping(writer: asyncio.StreamWriter, args: list, storage: DataSt
     """
     if len(args) > 1:
         logging.info("Wrong number of arguments for PING command")
-        writer.write(format_simple_error("ERR wrong number of arguments for 'ping' command"))
+        writer.write(
+            format_simple_error("ERR wrong number of arguments for 'ping' command")
+        )
     elif len(args) == 1:
         message: str = args[0]
         logging.info(f"Sent PING response with message: {message}")
@@ -63,7 +70,10 @@ async def _handle_ping(writer: asyncio.StreamWriter, args: list, storage: DataSt
 
     await writer.drain()
 
-async def _handle_echo(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+
+async def _handle_echo(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the ECHO command.
 
@@ -74,7 +84,9 @@ async def _handle_echo(writer: asyncio.StreamWriter, args: list, storage: DataSt
     """
     if len(args) != 1:
         logging.info("Wrong number of arguments for ECHO command")
-        writer.write(format_simple_error("ERR wrong number of arguments for 'echo' command"))
+        writer.write(
+            format_simple_error("ERR wrong number of arguments for 'echo' command")
+        )
     else:
         message: str = args[0]
         logging.info(f"Sent ECHO response with message: {message}")
@@ -82,7 +94,10 @@ async def _handle_echo(writer: asyncio.StreamWriter, args: list, storage: DataSt
 
     await writer.drain()
 
-async def _handle_type(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+
+async def _handle_type(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the TYPE command.
 
@@ -112,13 +127,16 @@ async def _handle_type(writer: asyncio.StreamWriter, args: list, storage: DataSt
     elif key_type is Type[OrderedSet]:
         logging.info(f"Sent TYPE set for key {key}")
         writer.write(format_simple_string("set"))
-    else: # TODO: Remove this when type is fully implemented
+    else:  # TODO: Remove this when type is fully implemented
         logging.info(f"Sent TYPE unknown for key {key}")
         writer.write(format_simple_string("unknown"))
 
     await writer.drain()  # Flush write buffer
 
-async def _handle_exists(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+
+async def _handle_exists(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the EXISTS command.
 
@@ -139,7 +157,10 @@ async def _handle_exists(writer: asyncio.StreamWriter, args: list, storage: Data
     writer.write(format_integer_success(num_existing_keys))
     await writer.drain()  # Flush write buffer
 
-async def _handle_del(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+
+async def _handle_del(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the DEL command.
 

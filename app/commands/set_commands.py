@@ -13,6 +13,7 @@ from app.utils import OrderedSet
 from app.utils import WRONG_TYPE_STRING
 from app.data_storage import WrongTypeError
 
+
 async def handle_set_commands(
     writer: asyncio.StreamWriter, command: str, args: list, storage: DataStorage
 ) -> None:
@@ -44,9 +45,14 @@ async def handle_set_commands(
         await handler(writer, args, storage)
     else:
         logging.info(f"Unknown set command: {command}")
-        await write_and_drain(writer, format_simple_error(f"ERR unknown set command: {command}"))
+        await write_and_drain(
+            writer, format_simple_error(f"ERR unknown set command: {command}")
+        )
 
-async def _handle_sadd(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+
+async def _handle_sadd(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the SADD command.
 
@@ -61,13 +67,16 @@ async def _handle_sadd(writer: asyncio.StreamWriter, args: list, storage: DataSt
     args_len: int = len(args)
 
     if args_len < 2:
-        await write_and_drain(writer, format_simple_error("ERR wrong number of arguments for 'sadd' command"))
+        await write_and_drain(
+            writer,
+            format_simple_error("ERR wrong number of arguments for 'sadd' command"),
+        )
         return
 
     key: str = args[0]
 
     # Get all set members to add
-    set_members: list = args[1:] # All args after key
+    set_members: list = args[1:]  # All args after key
 
     logging.info(f"SADD: {key} = {set_members}")
 
@@ -75,7 +84,10 @@ async def _handle_sadd(writer: asyncio.StreamWriter, args: list, storage: DataSt
 
     await write_and_drain(writer, format_integer_success(added_count))
 
-async def _handle_scard(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+
+async def _handle_scard(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the SCARD command.
 
@@ -91,7 +103,10 @@ async def _handle_scard(writer: asyncio.StreamWriter, args: list, storage: DataS
     args_len: int = len(args)
 
     if args_len != 1:
-        await write_and_drain(writer, format_simple_error("ERR wrong number of arguments for 'scard' command"))
+        await write_and_drain(
+            writer,
+            format_simple_error("ERR wrong number of arguments for 'scard' command"),
+        )
         return
 
     key: str = args[0]
@@ -101,12 +116,15 @@ async def _handle_scard(writer: asyncio.StreamWriter, args: list, storage: DataS
     try:
         cardinality: int = await storage.scard(key)
     except WrongTypeError as e:
-       await write_and_drain(writer, format_simple_error(str(e)))
-       return
+        await write_and_drain(writer, format_simple_error(str(e)))
+        return
 
     await write_and_drain(writer, format_integer_success(cardinality))
 
-async def _handle_sdiff(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+
+async def _handle_sdiff(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the SDIFF command.
 
@@ -122,26 +140,32 @@ async def _handle_sdiff(writer: asyncio.StreamWriter, args: list, storage: DataS
     args_len: int = len(args)
 
     if args_len < 1:
-        await write_and_drain(writer, format_simple_error("ERR wrong number of arguments for 'sdiff' command"))
+        await write_and_drain(
+            writer,
+            format_simple_error("ERR wrong number of arguments for 'sdiff' command"),
+        )
         return
 
     # Get all keys to perform the difference operation on
-    keys: list = args # All args
+    keys: list = args  # All args
 
     logging.info(f"SDIFF: {keys}")
 
     try:
         difference_members: OrderedSet = await storage.sdiff(keys)
     except WrongTypeError as e:
-       await write_and_drain(writer, format_simple_error(str(e)))
-       return
+        await write_and_drain(writer, format_simple_error(str(e)))
+        return
 
     if not difference_members:
-        await write_and_drain(writer, format_resp_array([])) # No members in set
+        await write_and_drain(writer, format_resp_array([]))  # No members in set
     else:
         await write_and_drain(writer, format_resp_array(difference_members))
 
-async def _handle_sdiff_store(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+
+async def _handle_sdiff_store(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the SDIFFSTORE command.
 
@@ -155,21 +179,26 @@ async def _handle_sdiff_store(writer: asyncio.StreamWriter, args: list, storage:
     args_len: int = len(args)
 
     if args_len < 2:
-        await write_and_drain(writer, format_simple_error("ERR wrong number of arguments for 'sdiffstore' command"))
+        await write_and_drain(
+            writer,
+            format_simple_error(
+                "ERR wrong number of arguments for 'sdiffstore' command"
+            ),
+        )
         return
 
     # Get all keys to perform the difference operation on
-    destination: str = args[0] # First arg is destination
-    keys: list = args[1:] # All args after destination
+    destination: str = args[0]  # First arg is destination
+    keys: list = args[1:]  # All args after destination
 
     logging.info(f"SDIFFSTORE: {keys}")
 
     try:
         difference_members: OrderedSet = await storage.sdiff(keys)
     except WrongTypeError as e:
-       await write_and_drain(writer, format_simple_error(str(e)))
-       return
-    
+        await write_and_drain(writer, format_simple_error(str(e)))
+        return
+
     await storage.set_overwrite(destination, difference_members)
 
     # RESP returns the number of members in the resulting set
@@ -178,7 +207,10 @@ async def _handle_sdiff_store(writer: asyncio.StreamWriter, args: list, storage:
     else:
         await write_and_drain(writer, format_integer_success(len(difference_members)))
 
-async def _handle_sinter(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+
+async def _handle_sinter(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the SINTER command.
 
@@ -194,26 +226,32 @@ async def _handle_sinter(writer: asyncio.StreamWriter, args: list, storage: Data
     args_len: int = len(args)
 
     if args_len < 1:
-        await write_and_drain(writer, format_simple_error("ERR wrong number of arguments for 'sinter' command"))
+        await write_and_drain(
+            writer,
+            format_simple_error("ERR wrong number of arguments for 'sinter' command"),
+        )
         return
 
     # Get all keys to perform the i operation on
-    keys: list = args # All args
+    keys: list = args  # All args
 
     logging.info(f"SINTER: {keys}")
 
     try:
         intersection_members: OrderedSet = await storage.sinter(keys)
     except WrongTypeError as e:
-       await write_and_drain(writer, format_simple_error(str(e)))
-       return
+        await write_and_drain(writer, format_simple_error(str(e)))
+        return
 
     if not intersection_members:
-        await write_and_drain(writer, format_resp_array([])) # No members in set
+        await write_and_drain(writer, format_resp_array([]))  # No members in set
     else:
         await write_and_drain(writer, format_resp_array(intersection_members))
 
-async def _handle_sinter_store(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+
+async def _handle_sinter_store(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the SINTERSTORE command.
 
@@ -227,21 +265,26 @@ async def _handle_sinter_store(writer: asyncio.StreamWriter, args: list, storage
     args_len: int = len(args)
 
     if args_len < 2:
-        await write_and_drain(writer, format_simple_error("ERR wrong number of arguments for 'sinterstore' command"))
+        await write_and_drain(
+            writer,
+            format_simple_error(
+                "ERR wrong number of arguments for 'sinterstore' command"
+            ),
+        )
         return
 
     # Get all keys to perform the difference operation on
-    destination: str = args[0] # First arg is destination
-    keys: list = args[1:] # All args after destination
+    destination: str = args[0]  # First arg is destination
+    keys: list = args[1:]  # All args after destination
 
     logging.info(f"SINTERSTORE: {keys}")
 
     try:
         intersection_members: OrderedSet = await storage.sinter(keys)
     except WrongTypeError as e:
-       await write_and_drain(writer, format_simple_error(str(e)))
-       return
-    
+        await write_and_drain(writer, format_simple_error(str(e)))
+        return
+
     await storage.set_overwrite(destination, intersection_members)
 
     # RESP returns the number of members in the resulting set
@@ -250,7 +293,10 @@ async def _handle_sinter_store(writer: asyncio.StreamWriter, args: list, storage
     else:
         await write_and_drain(writer, format_integer_success(len(intersection_members)))
 
-async def _handle_sunion(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+
+async def _handle_sunion(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the SUNION command.
 
@@ -266,26 +312,32 @@ async def _handle_sunion(writer: asyncio.StreamWriter, args: list, storage: Data
     args_len: int = len(args)
 
     if args_len < 1:
-        await write_and_drain(writer, format_simple_error("ERR wrong number of arguments for 'sunion' command"))
+        await write_and_drain(
+            writer,
+            format_simple_error("ERR wrong number of arguments for 'sunion' command"),
+        )
         return
 
     # Get all keys to perform the union operation on
-    keys: list = args # All args
+    keys: list = args  # All args
 
     logging.info(f"SUNION: {keys}")
 
     try:
         union_members: OrderedSet = await storage.sunion(keys)
     except WrongTypeError as e:
-       await write_and_drain(writer, format_simple_error(str(e)))
-       return
-    
+        await write_and_drain(writer, format_simple_error(str(e)))
+        return
+
     if not union_members:
-        await write_and_drain(writer, format_resp_array([])) # No members in set
+        await write_and_drain(writer, format_resp_array([]))  # No members in set
     else:
         await write_and_drain(writer, format_resp_array(union_members))
 
-async def _handle_sunion_store(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+
+async def _handle_sunion_store(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the SUNIONSTORE command.
 
@@ -299,20 +351,25 @@ async def _handle_sunion_store(writer: asyncio.StreamWriter, args: list, storage
     args_len: int = len(args)
 
     if args_len < 2:
-        await write_and_drain(writer, format_simple_error("ERR wrong number of arguments for 'sunionstore' command"))
+        await write_and_drain(
+            writer,
+            format_simple_error(
+                "ERR wrong number of arguments for 'sunionstore' command"
+            ),
+        )
         return
 
     # Get all keys to perform the union operation on
-    destination: str = args[0] # First arg is destination
-    keys: list = args[1:] # All args after destination
+    destination: str = args[0]  # First arg is destination
+    keys: list = args[1:]  # All args after destination
 
     logging.info(f"SUNIONSTORE: {keys}")
 
     try:
         union_members: OrderedSet = await storage.sunion(keys)
     except WrongTypeError as e:
-       await write_and_drain(writer, format_simple_error(str(e)))
-       return
+        await write_and_drain(writer, format_simple_error(str(e)))
+        return
 
     await storage.set_overwrite(destination, union_members)
 
@@ -321,7 +378,10 @@ async def _handle_sunion_store(writer: asyncio.StreamWriter, args: list, storage
     else:
         await write_and_drain(writer, format_integer_success(len(union_members)))
 
-async def _handle_sismember(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+
+async def _handle_sismember(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the SISMEMBER command.
 
@@ -337,7 +397,12 @@ async def _handle_sismember(writer: asyncio.StreamWriter, args: list, storage: D
     args_len: int = len(args)
 
     if args_len != 2:
-        await write_and_drain(writer, format_simple_error("ERR wrong number of arguments for 'sismember' command"))
+        await write_and_drain(
+            writer,
+            format_simple_error(
+                "ERR wrong number of arguments for 'sismember' command"
+            ),
+        )
         return
 
     key: str = args[0]
@@ -352,7 +417,10 @@ async def _handle_sismember(writer: asyncio.StreamWriter, args: list, storage: D
     else:
         await write_and_drain(writer, format_integer_success(0))
 
-async def _handle_smembers(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+
+async def _handle_smembers(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the SMEMBERS command.
 
@@ -368,7 +436,10 @@ async def _handle_smembers(writer: asyncio.StreamWriter, args: list, storage: Da
     args_len: int = len(args)
 
     if args_len != 1:
-        await write_and_drain(writer, format_simple_error("ERR wrong number of arguments for 'smembers' command"))
+        await write_and_drain(
+            writer,
+            format_simple_error("ERR wrong number of arguments for 'smembers' command"),
+        )
         return
 
     key: str = args[0]
@@ -378,13 +449,18 @@ async def _handle_smembers(writer: asyncio.StreamWriter, args: list, storage: Da
     set_members: OrderedSet = await storage.get(key)
 
     if not set_members:
-        await write_and_drain(writer, format_resp_array([])) # No members in set or key does not exist/is not a set
-    elif not isinstance(set_members, OrderedSet): # What Redis does
+        await write_and_drain(
+            writer, format_resp_array([])
+        )  # No members in set or key does not exist/is not a set
+    elif not isinstance(set_members, OrderedSet):  # What Redis does
         await write_and_drain(writer, format_simple_error(WRONG_TYPE_STRING))
     else:
         await write_and_drain(writer, format_resp_array(set_members))
 
-async def _handle_smove(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+
+async def _handle_smove(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the SMOVE command.
 
@@ -392,7 +468,7 @@ async def _handle_smove(writer: asyncio.StreamWriter, args: list, storage: DataS
         If the source set does not exist, no operation is performed and 0 is returned.
         If the source exists but does not hold a set, an error is returned.
         If the destination set does not exist, it is created before the operation is performed.
-        
+
     Args:
         writer (asyncio.StreamWriter): The StreamWriter to write the response to.
         args (list): The arguments provided.
@@ -401,7 +477,10 @@ async def _handle_smove(writer: asyncio.StreamWriter, args: list, storage: DataS
     args_len: int = len(args)
 
     if args_len != 3:
-        await write_and_drain(writer, format_simple_error("ERR wrong number of arguments for 'smove' command"))
+        await write_and_drain(
+            writer,
+            format_simple_error("ERR wrong number of arguments for 'smove' command"),
+        )
         return
 
     source: str = args[0]
@@ -421,7 +500,10 @@ async def _handle_smove(writer: asyncio.StreamWriter, args: list, storage: DataS
     else:
         await write_and_drain(writer, format_integer_success(0))
 
-async def _handle_srem(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+
+async def _handle_srem(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the SREM command.
 
@@ -429,7 +511,7 @@ async def _handle_srem(writer: asyncio.StreamWriter, args: list, storage: DataSt
         If the member is not a member of the set, it is ignored.
         If key does not exist, it is treated as an empty set and 0 is returned.
         Return error when value stored at key is not a set.
-        
+
     Args:
         writer (asyncio.StreamWriter): The StreamWriter to write the response to.
         args (list): The arguments provided.
@@ -438,7 +520,10 @@ async def _handle_srem(writer: asyncio.StreamWriter, args: list, storage: DataSt
     args_len: int = len(args)
 
     if args_len != 2:
-        await write_and_drain(writer, format_simple_error("ERR wrong number of arguments for 'srem' command"))
+        await write_and_drain(
+            writer,
+            format_simple_error("ERR wrong number of arguments for 'srem' command"),
+        )
         return
 
     key: str = args[0]
@@ -449,7 +534,7 @@ async def _handle_srem(writer: asyncio.StreamWriter, args: list, storage: DataSt
     try:
         removed_count: int = await storage.srem(key, members)
     except WrongTypeError as e:
-       await write_and_drain(writer, format_simple_error(str(e)))
-       return
+        await write_and_drain(writer, format_simple_error(str(e)))
+        return
 
     await write_and_drain(writer, format_integer_success(removed_count))

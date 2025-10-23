@@ -14,17 +14,21 @@ from app.utils import OrderedSet
 from app.utils import WRONG_TYPE_STRING
 
 ValueWithExpiry = namedtuple("ValueWithExpiry", ["value", "expiry_time"])
-BlockedClientFutureResult = namedtuple("BlockedClientFutureResult", ["key", "removed_item", "timestamp"])
+BlockedClientFutureResult = namedtuple(
+    "BlockedClientFutureResult", ["key", "removed_item", "timestamp"]
+)
+
 
 class WrongTypeError(TypeError):
     def __init__(self):
         super().__init__(WRONG_TYPE_STRING)
 
-class DataStorage():
+
+class DataStorage:
     """
     Stores all data and provides concurrent-safe data access
 
-    Note: 
+    Note:
     1. Using a per-key lock led to worse performance, probably due to the overhead of managing many locks.
     2. Lists are stored as Python lists instead of deque to improve cache performance and make indexing faster.
     """
@@ -36,7 +40,7 @@ class DataStorage():
         self.blocked_clients = {}  # key: list blocking for, value: (timestamp, future, key)
 
     ############################################### Helpers ####################################################
-        
+
     async def unblock_all_blocked_clients(self) -> None:
         """
         Unblock all blocked clients by setting their futures to None.
@@ -44,7 +48,9 @@ class DataStorage():
         """
 
         for key, blocked_list in self.blocked_clients.items():
-            logging.info(f" Unblocking {len(blocked_list)} clients blocked on list: {key}")
+            logging.info(
+                f" Unblocking {len(blocked_list)} clients blocked on list: {key}"
+            )
 
             while len(blocked_list) > 0:
                 client_timestamp: float = blocked_list[0][0]
@@ -54,7 +60,9 @@ class DataStorage():
                 if not future.done():
                     future.set_result(None)
                 else:
-                    logging.info(f"Future already done for blocked client on list: {key}")
+                    logging.info(
+                        f"Future already done for blocked client on list: {key}"
+                    )
 
         self.blocked_clients.clear()
 
@@ -72,7 +80,9 @@ class DataStorage():
         # Unblock any clients waiting on this list
         if key in self.blocked_clients and len(self.blocked_clients[key]) > 0:
             num_blocked_clients: int = len(self.blocked_clients[key])
-            logging.info(f" Unblocking {num_blocked_clients} clients blocked on list: {key}")
+            logging.info(
+                f" Unblocking {num_blocked_clients} clients blocked on list: {key}"
+            )
 
             while len(self.blocked_clients[key]) > 0:
                 client_timestamp: float = self.blocked_clients[key][0][0]
@@ -83,17 +93,25 @@ class DataStorage():
                     # namedtuples are immutable by default, so need to create a new one
                     # TODO: Add expiry time support for lists
                     new_item = ValueWithExpiry(accessed_list, None)
-                    logging.info(f"List after unblocking client w/ timestamp {client_timestamp}: {new_item.value}")
-                    self.storage_dict[key] = new_item # Update value in storage
-                    futures_to_set[future] = BlockedClientFutureResult(list_key, item_to_remove, client_timestamp)
+                    logging.info(
+                        f"List after unblocking client w/ timestamp {client_timestamp}: {new_item.value}"
+                    )
+                    self.storage_dict[key] = new_item  # Update value in storage
+                    futures_to_set[future] = BlockedClientFutureResult(
+                        list_key, item_to_remove, client_timestamp
+                    )
                 else:
-                    logging.info(f"Future already done for blocked client on list: {key}")
+                    logging.info(
+                        f"Future already done for blocked client on list: {key}"
+                    )
 
         # Set results here so async doesn't take over and continue w/ BLPOP
         if len(futures_to_set) > 0:
             removed_item = accessed_list.pop(0)
         for future, blocked_info in futures_to_set.items():
-            new_blocked_info = BlockedClientFutureResult(blocked_info.key, removed_item, blocked_info.timestamp)
+            new_blocked_info = BlockedClientFutureResult(
+                blocked_info.key, removed_item, blocked_info.timestamp
+            )
             future.set_result(new_blocked_info)
 
     async def get_ttl(self, key: str) -> float | None:
@@ -108,12 +126,18 @@ class DataStorage():
 
             item = self.storage_dict.get(key, None)
             curr_time = time.time()
-            
-            if item is not None and item.expiry_time is not None and curr_time > item.expiry_time:
-                logging.info(f"Difference b/n curr time and expiry time: {curr_time - item.expiry_time}")
+
+            if (
+                item is not None
+                and item.expiry_time is not None
+                and curr_time > item.expiry_time
+            ):
+                logging.info(
+                    f"Difference b/n curr time and expiry time: {curr_time - item.expiry_time}"
+                )
                 logging.info(f"Deleting expired key: {key}")
                 return None
-            
+
             if item is not None:
                 logging.info(f"Retrieved TTL for key '{key}': {item.expiry_time}")
                 return item.expiry_time
@@ -132,7 +156,7 @@ class DataStorage():
 
         async with self.lock:
             return key in self.storage_dict
-        
+
     # TODO: Add support for set, zset, hash, stream
     async def key_type(self, key: str) -> Type[None | str | list | dict | OrderedSet]:
         """
@@ -158,7 +182,7 @@ class DataStorage():
             else:
                 logging.info(f"Key '{key}' is of unknown type")
                 return Type[None]
-        
+
     async def delete(self, key: str) -> bool:
         """
         Remove the specified key.
@@ -173,7 +197,7 @@ class DataStorage():
             else:
                 logging.info(f"Key not found for deletion: {key}")
                 return False
-        
+
     async def flushdb_async(self) -> None:
         """
         Remove all keys from the current database.
@@ -188,7 +212,7 @@ class DataStorage():
         """
         self.storage_dict.clear()
         logging.info("Flushed all data from the database (sync)")
-        
+
     ############################################### Strings ####################################################
 
     async def set(self, key: str, value: str, expiry_time: float | None = None) -> None:
@@ -203,8 +227,14 @@ class DataStorage():
 
             item = self.storage_dict.get(key, None)
             curr_time = time.time()
-            if item is not None and item.expiry_time is not None and curr_time > item.expiry_time:
-                logging.info(f"Difference b/n curr time and expiry time: {curr_time - item.expiry_time}")
+            if (
+                item is not None
+                and item.expiry_time is not None
+                and curr_time > item.expiry_time
+            ):
+                logging.info(
+                    f"Difference b/n curr time and expiry time: {curr_time - item.expiry_time}"
+                )
                 logging.info(f"Deleting expired key: {key}")
                 del self.storage_dict[key]
                 return None
@@ -215,9 +245,9 @@ class DataStorage():
             else:
                 logging.info(f"Key not found: {key}")
                 return None
-            
+
     ############################################### Lists ####################################################
-            
+
     async def rpush(self, key: str, items: list) -> int:
         """
         Add items to the end of a list stored at the specified key.
@@ -231,9 +261,8 @@ class DataStorage():
                 self.storage_dict[key] = ValueWithExpiry([], None)
                 logging.info(f"Created new list for key: {key}")
 
-
             accessed_list: list = self.storage_dict[key].value
-            accessed_list.extend(items) # Append but for an entire list
+            accessed_list.extend(items)  # Append but for an entire list
             logging.info(f"Appended {items} to list {key}")
 
         # Need to get it here b/c list length may have changed after unblocking clients
@@ -270,7 +299,7 @@ class DataStorage():
                 # Subtract by 1 accounts for zero-indexing
                 # Doing this is faster than reversing the list
                 accessed_list.insert(i, items[item_len - i - 1])
-            
+
             logging.info(f"Prepended {items} to list {key}")
 
         # Need to get it here b/c list length may have changed after unblocking clients
@@ -281,7 +310,7 @@ class DataStorage():
 
         # Return number of elements in list
         return list_len
-    
+
     async def llen(self, key: str) -> int:
         """
         Return length of key
@@ -303,7 +332,7 @@ class DataStorage():
 
         Start and end indices are inclusive.
 
-        Negative indices are supported and count from the end of the list. Ex: -1 is last element, -2 is second-last element, and 
+        Negative indices are supported and count from the end of the list. Ex: -1 is last element, -2 is second-last element, and
         so on.
 
         If negative index is >= length of list, it is treated as 0.
@@ -312,14 +341,13 @@ class DataStorage():
           - List does not exist
           - Start index is >= list length
           - Start index > stop index
-        
+
         If stop index is >= list length, stop index is last element
         """
 
         if (start > end) and ((start > 0 and end > 0) or (start < 0 and end < 0)):
             logging.info(f"Start index {start} > end index {end} in search for {key}")
             return []
-
 
         async with self.lock:
             item = self.storage_dict.get(key, None)
@@ -329,12 +357,16 @@ class DataStorage():
                 logging.info(f"List is: {item.value}")
 
                 if start >= list_len:
-                    logging.info(f"Start index {start} >= list length {list_len} in search for {key}")
+                    logging.info(
+                        f"Start index {start} >= list length {list_len} in search for {key}"
+                    )
                     return []
                 if end >= list_len:
-                    logging.info(f"End index {end} >= list length {list_len} in search for {key}, treating last item as end")
-                    end: int = list_len - 1 # Otherwise will overflow on last element
-                
+                    logging.info(
+                        f"End index {end} >= list length {list_len} in search for {key}, treating last item as end"
+                    )
+                    end: int = list_len - 1  # Otherwise will overflow on last element
+
                 if end == -1:
                     # Prevents empty list when we want to include the last element and using negative indexing
                     # Empty list will happen b/c index will be [start:0] -> makes empty list
@@ -345,14 +377,18 @@ class DataStorage():
                     logging.info(f"Negative start index {start} includes last element")
                     items_to_return: list = item.value[start:]
                 else:
-                    items_to_return: list = item.value[start:end+1]  # Redis treats end as inclusive
+                    items_to_return: list = item.value[
+                        start : end + 1
+                    ]  # Redis treats end as inclusive
 
-                logging.info(f"Retrieved elements from {key} from index {start} to {end}: {items_to_return}")
+                logging.info(
+                    f"Retrieved elements from {key} from index {start} to {end}: {items_to_return}"
+                )
                 return items_to_return
             else:
                 logging.info(f"Key not found or not a list: {key}")
-                return [] # RESP specification returns empty array for this
-            
+                return []  # RESP specification returns empty array for this
+
     async def lpop(self, key: str, count: int = 1) -> list | None:
         """
         Remove and return the specified number of elements from the left side of the list stored at the specified key.
@@ -361,9 +397,9 @@ class DataStorage():
         """
         async with self.lock:
             item = self.storage_dict.get(key, None)
-            
+
             if item is not None and isinstance(item.value, list):
-                if (len(item.value) == 0):
+                if len(item.value) == 0:
                     logging.info(f"List is empty: {key}")
                     return None  # RESP specification returns null bulk string for this
                 else:
@@ -371,15 +407,15 @@ class DataStorage():
 
                     # namedtuples are immutable by default, so need to create a new one
                     new_item = ValueWithExpiry(item.value[count:], item.expiry_time)
-                    self.storage_dict[key] = new_item # Update value in storage
+                    self.storage_dict[key] = new_item  # Update value in storage
 
                     logging.info(f"Removed items from {key}: {removed_items}")
                     return removed_items
-            
+
             else:
                 logging.info(f"Key not found or not a list: {key}")
-                return None # RESP specification returns null bulk string for this
-            
+                return None  # RESP specification returns null bulk string for this
+
     async def blpop(self, key: str, timeout: int = 0) -> tuple[str, list | None]:
         """
         Block for specified blocking time (in seconds) until an element is available in the list.
@@ -394,9 +430,11 @@ class DataStorage():
         # So we can just call it and see if it returns something
         lpop_result = await self.lpop(key, 1)
         if lpop_result is not None:
-            logging.info(f"List {key} has items before BLPOP call, returning immediately")
+            logging.info(
+                f"List {key} has items before BLPOP call, returning immediately"
+            )
             return {"list_name": key, "removed_item": lpop_result[0]}
-        
+
         # Block if list does not exist or is empty
         logging.info(f"Blocking on list: {key} with timeout: {timeout}")
 
@@ -410,8 +448,13 @@ class DataStorage():
         try:
             await asyncio.wait_for(future, timeout=timeout if timeout > 0 else None)
             blocked_info: BlockedClientFutureResult = future.result()
-            logging.info(f"BLPOP -> Removed {blocked_info.removed_item} from {blocked_info.key} for client w/ timestamp {blocked_info.timestamp}")
-            return {"list_name": blocked_info.key, "removed_item": blocked_info.removed_item}
+            logging.info(
+                f"BLPOP -> Removed {blocked_info.removed_item} from {blocked_info.key} for client w/ timestamp {blocked_info.timestamp}"
+            )
+            return {
+                "list_name": blocked_info.key,
+                "removed_item": blocked_info.removed_item,
+            }
         except asyncio.TimeoutError:
             # Remove from queue if timed out
             logging.info(f"TimeoutError in blpop for key: {key}")
@@ -419,13 +462,15 @@ class DataStorage():
             # Remove blocked client from queue
             if key in self.blocked_clients:
                 # Rebuild heap without the timed-out future
-                self.blocked_clients[key] = [(t, f, k) for (t, f, k) in self.blocked_clients[key] if f != future]
+                self.blocked_clients[key] = [
+                    (t, f, k) for (t, f, k) in self.blocked_clients[key] if f != future
+                ]
                 heapq.heapify(self.blocked_clients[key])
 
-            return None # RESP specification returns null bulk string for this
-        
+            return None  # RESP specification returns null bulk string for this
+
     ############################################### Streams ####################################################
-        
+
     # TODO: Implement stream as radix trie instead of dict
     async def xadd(self, key: str, id: str, field_value_pairs: dict) -> str:
         """
@@ -433,7 +478,7 @@ class DataStorage():
 
         Create the stream if it doesn't exist.
 
-        The id can be specified in 3 formats: 
+        The id can be specified in 3 formats:
            1. Explicitly specified as <milliseconds>-<sequence number>
            2. Partially auto-generated as <milliseconds>-*
            3. Fully auto-generated as *
@@ -448,38 +493,57 @@ class DataStorage():
         if id == "*":
             auto_generate_milliseconds = True
             auto_generate_sequence_number = True
-            logging.info(f"Need to auto-generate milliseconds and sequence number in stream with key {key}")
+            logging.info(
+                f"Need to auto-generate milliseconds and sequence number in stream with key {key}"
+            )
 
             # Use current Unix time in milliseconds for time and 0 for sequence number
             # Needs to be int for RESP response
             milliseconds = int(time.time() * 1000)
-            sequence_number = 0 # Will be updated below if time already exists in stream
+            sequence_number = (
+                0  # Will be updated below if time already exists in stream
+            )
 
         else:
             id_parts = id.split("-")
             if len(id_parts) != 2:
                 # Will catch negative milliseconds or sequence numbers
-                logging.info(f"Failed to add entry to stream with key {key} b/c ID {id} is not in correct format")
-                raise ValueError("ERR Invalid stream ID specified as stream command argument")
-       
+                logging.info(
+                    f"Failed to add entry to stream with key {key} b/c ID {id} is not in correct format"
+                )
+                raise ValueError(
+                    "ERR Invalid stream ID specified as stream command argument"
+                )
+
             try:
                 milliseconds = int(id_parts[0])
                 sequence_number = int(id_parts[1])
             except ValueError:
                 # Check if sequence number needs to be auto-generated
                 if id_parts[1] == "*":
-                    logging.info(f"Need to auto-generate sequence number for ID {id} in stream with key {key}")
+                    logging.info(
+                        f"Need to auto-generate sequence number for ID {id} in stream with key {key}"
+                    )
                     auto_generate_sequence_number = True
-                    
+
                 else:
-                    logging.info(f"Failed to add entry to stream with key {key} b/c ID {id} is not in correct format")
-                    raise ValueError("ERR Invalid stream ID specified as stream command argument")
-        
+                    logging.info(
+                        f"Failed to add entry to stream with key {key} b/c ID {id} is not in correct format"
+                    )
+                    raise ValueError(
+                        "ERR Invalid stream ID specified as stream command argument"
+                    )
+
         # Check that ID is greater than 0-0 for explicitly specified IDs
-        if not auto_generate_milliseconds and not auto_generate_sequence_number and milliseconds == 0 and sequence_number == 0:
+        if (
+            not auto_generate_milliseconds
+            and not auto_generate_sequence_number
+            and milliseconds == 0
+            and sequence_number == 0
+        ):
             logging.info(f"Failed to create stream with key {key} b/c ID was 0-0")
             raise ValueError("ERR The ID specified in XADD must be greater than 0-0")
-        
+
         async with self.lock:
             # Check that milliseconds is >= last entry's milliseconds
             if key in self.storage_dict:
@@ -495,25 +559,44 @@ class DataStorage():
                         # Default sequence number is 0 except when the time part is also 0
                         # If time part is 0, then default sequence number is 1
                         if milliseconds == 0:
-                            sequence_number = last_sequence_number + 1 if milliseconds == last_milliseconds else 1
+                            sequence_number = (
+                                last_sequence_number + 1
+                                if milliseconds == last_milliseconds
+                                else 1
+                            )
                         else:
-                            sequence_number = last_sequence_number + 1 if milliseconds == last_milliseconds else 0
+                            sequence_number = (
+                                last_sequence_number + 1
+                                if milliseconds == last_milliseconds
+                                else 0
+                            )
 
                         id = f"{milliseconds}-{sequence_number}"
-                        logging.info(f"Auto-generated sequence number, new ID is {id} for existing stream with key {key}")
+                        logging.info(
+                            f"Auto-generated sequence number, new ID is {id} for existing stream with key {key}"
+                        )
 
                     elif auto_generate_milliseconds:
                         if milliseconds == last_milliseconds:
                             sequence_number = last_sequence_number + 1
 
                         id = f"{milliseconds}-{sequence_number}"
-                        logging.info(f"Auto-generated id, new ID is {id} for existing stream with key {key}")
-                    
+                        logging.info(
+                            f"Auto-generated id, new ID is {id} for existing stream with key {key}"
+                        )
+
                     else:
-                        if milliseconds < last_milliseconds or (milliseconds == last_milliseconds and sequence_number <= last_sequence_number):
-                            logging.info(f"Failed to add entry to stream with key {key} b/c ID {id} is not greater than last entry ID {last_entry_id}")
-                            raise ValueError("ERR The ID specified in XADD is equal or smaller than the target stream top item")
-                    
+                        if milliseconds < last_milliseconds or (
+                            milliseconds == last_milliseconds
+                            and sequence_number <= last_sequence_number
+                        ):
+                            logging.info(
+                                f"Failed to add entry to stream with key {key} b/c ID {id} is not greater than last entry ID {last_entry_id}"
+                            )
+                            raise ValueError(
+                                "ERR The ID specified in XADD is equal or smaller than the target stream top item"
+                            )
+
             # Add entry / create stream if it doesn't exist
             if key not in self.storage_dict:
                 if auto_generate_sequence_number:
@@ -523,7 +606,9 @@ class DataStorage():
                     sequence_number = 1 if milliseconds == 0 else 0
 
                     id = f"{milliseconds}-{sequence_number}"
-                    logging.info(f"Auto-generated sequence number, new ID is {id} for new stream with key {key}")
+                    logging.info(
+                        f"Auto-generated sequence number, new ID is {id} for new stream with key {key}"
+                    )
 
                 # Add entry
                 self.storage_dict[key] = ValueWithExpiry({}, None)
@@ -537,8 +622,10 @@ class DataStorage():
 
         # RESP specification returns the ID of the entry created for this
         return id
-    
-    async def xrange(self, key: str, start: str, end: str, count: int | None = None) -> list:
+
+    async def xrange(
+        self, key: str, start: str, end: str, count: int | None = None
+    ) -> list:
         """
         Retrieve a range of entries from a stream stored at the specified key.
 
@@ -567,15 +654,19 @@ class DataStorage():
 
             # Handle negative sequence numbers or milliseconds
             if len(id1_parts) > 2 or len(id2_parts) > 2:
-                raise ValueError("ERR Invalid stream ID specified as stream command argument")
+                raise ValueError(
+                    "ERR Invalid stream ID specified as stream command argument"
+                )
 
             # Guaranteed to have at least 1 part
             try:
                 milliseconds1 = int(id1_parts[0])
                 milliseconds2 = int(id2_parts[0])
             except ValueError:
-                raise ValueError("ERR Invalid stream ID specified as stream command argument")
-           
+                raise ValueError(
+                    "ERR Invalid stream ID specified as stream command argument"
+                )
+
             try:
                 sequence_number1 = int(id1_parts[1])
                 sequence_number2 = int(id2_parts[1])
@@ -584,11 +675,17 @@ class DataStorage():
 
                 # Get max sequence number for milliseconds2
                 sequence_number2 = max(
-                    (int(entry_id.split("-")[1]) for entry_id in stream.keys() if entry_id.startswith(f"{milliseconds2}-")),
-                    default=0
+                    (
+                        int(entry_id.split("-")[1])
+                        for entry_id in stream.keys()
+                        if entry_id.startswith(f"{milliseconds2}-")
+                    ),
+                    default=0,
                 )
-            except ValueError: # If sequence number is not specified as an integer
-                raise ValueError("ERR Invalid stream ID specified as stream command argument")
+            except ValueError:  # If sequence number is not specified as an integer
+                raise ValueError(
+                    "ERR Invalid stream ID specified as stream command argument"
+                )
 
             if milliseconds1 < milliseconds2:
                 return True
@@ -603,12 +700,25 @@ class DataStorage():
                 entries: list = []
 
                 for entry_id, field_value_pairs in stream.items():
-                    if id_less_than_equal(start, entry_id) and id_less_than_equal(entry_id, end):
-                        entries.append([entry_id, [str(k) for pair in field_value_pairs.items() for k in pair]])
+                    if id_less_than_equal(start, entry_id) and id_less_than_equal(
+                        entry_id, end
+                    ):
+                        entries.append(
+                            [
+                                entry_id,
+                                [
+                                    str(k)
+                                    for pair in field_value_pairs.items()
+                                    for k in pair
+                                ],
+                            ]
+                        )
                         if count is not None and len(entries) >= count:
                             break
 
-                logging.info(f"Retrieved entries from {key} from ID {start} to {end}: {entries}")
+                logging.info(
+                    f"Retrieved entries from {key} from ID {start} to {end}: {entries}"
+                )
                 return entries
             else:
                 logging.info(f"Key not found or not a stream: {key}")
@@ -643,12 +753,12 @@ class DataStorage():
 
             accessed_set: OrderedSet = self.storage_dict[key].value
             initial_size: int = len(accessed_set)
-            accessed_set.update(members) # Duplicate members are ignored
+            accessed_set.update(members)  # Duplicate members are ignored
             logging.info(f"Added {members} to set {key}")
 
             # Return number of new elements added to the set
             return len(accessed_set) - initial_size
-        
+
     async def scard(self, key: str) -> int:
         """
         Return the set cardinality (number of elements) of the set stored at key.
@@ -659,7 +769,9 @@ class DataStorage():
         async with self.lock:
             item = self.storage_dict.get(key, None)
             if item is not None and isinstance(item.value, OrderedSet):
-                logging.info(f"Retrieved cardinality for key '{key}': {len(item.value)}")
+                logging.info(
+                    f"Retrieved cardinality for key '{key}': {len(item.value)}"
+                )
                 return len(item.value)
             elif item is None:
                 logging.info(f"Key not found: {key}")
@@ -667,7 +779,7 @@ class DataStorage():
             else:
                 logging.info(f"Key not a set: {key}")
                 raise WrongTypeError()  # RESP specification returns error for this
-            
+
     async def sdiff(self, keys: list) -> OrderedSet:
         """
         Return the members of the set resulting from the difference between the first set and all the successive sets.
@@ -701,7 +813,7 @@ class DataStorage():
 
             logging.info(f"Set difference for keys {keys}: {result_set}")
             return result_set
-        
+
     async def sinter(self, keys: list) -> OrderedSet:
         """
         Return intersection of all sets.
@@ -714,7 +826,6 @@ class DataStorage():
         """
 
         async with self.lock:
-
             first_key = keys[0]
             first_set_item = self.storage_dict.get(first_key, None)
             if first_set_item is None:
@@ -723,7 +834,6 @@ class DataStorage():
             elif not isinstance(first_set_item.value, OrderedSet):
                 logging.info(f"First key not a set: {first_key}")
                 raise WrongTypeError()  # RESP specification returns error for this
-        
 
             result_set: OrderedSet = copy(first_set_item.value)
 
@@ -731,7 +841,9 @@ class DataStorage():
                 item = self.storage_dict.get(key, None)
                 if item is None:
                     # If any set doesn't exist, intersection is empty set
-                    logging.info(f"Key not found or not a set: {key}, intersection is empty set")
+                    logging.info(
+                        f"Key not found or not a set: {key}, intersection is empty set"
+                    )
                     return OrderedSet()
                 if item is not None and isinstance(item.value, OrderedSet):
                     result_set.intersection_update(item.value)
@@ -741,7 +853,7 @@ class DataStorage():
 
             logging.info(f"Set intersection for keys {keys}: {result_set}")
             return result_set
-        
+
     async def sunion(self, keys: list) -> OrderedSet:
         """
         Return union of all sets. Non-existent keys are treated as empty sets (so they are ignored).
@@ -749,7 +861,6 @@ class DataStorage():
         """
 
         async with self.lock:
-
             result_set: OrderedSet = OrderedSet()
 
             for key in keys:
@@ -766,7 +877,7 @@ class DataStorage():
 
             logging.info(f"Set union for keys {keys}: {result_set}")
             return result_set
-        
+
     async def smove(self, source: str, destination: str, member: str) -> bool:
         """
         Move a member from the source set to the destination set.
@@ -779,7 +890,7 @@ class DataStorage():
         async with self.lock:
             try:
                 source_item = self.storage_dict.get(source, None).value
-            except AttributeError: 
+            except AttributeError:
                 logging.info(f"Source key not found: {source}")
                 source_item = None
 
@@ -793,22 +904,28 @@ class DataStorage():
             if not isinstance(source_item, OrderedSet):
                 logging.info(f"Source key not a set: {source}")
                 raise WrongTypeError()  # RESP specification returns error for this
-            elif (destination_item is not None and not isinstance(destination_item, OrderedSet)):
-                 logging.info("Source or destination is not a set, cannot perform SMOVE")
-                 return False
-        
+            elif destination_item is not None and not isinstance(
+                destination_item, OrderedSet
+            ):
+                logging.info("Source or destination is not a set, cannot perform SMOVE")
+                return False
+
             if member in source_item:
                 source_item.remove(member)
                 if destination_item is None:
                     destination_item = OrderedSet()
-                    self.storage_dict[destination] = ValueWithExpiry(destination_item, None)
+                    self.storage_dict[destination] = ValueWithExpiry(
+                        destination_item, None
+                    )
                 destination_item.add(member)
-                logging.info(f"Moved member {member} from source set to destination set")
+                logging.info(
+                    f"Moved member {member} from source set to destination set"
+                )
                 return True
             else:
                 logging.info(f"Member {member} not found in source set, not moved")
                 return False
-            
+
     async def srem(self, key: str, members: list) -> int:
         """
         Remove one or more members from a set stored at the specified key.

@@ -35,10 +35,14 @@ async def handle_string_commands(
         await handler(writer, args, storage)
     else:
         logging.info(f"Unknown string command: {command}")
-        await write_and_drain(writer, format_simple_error(f"ERR unknown string command: {command}"))
+        await write_and_drain(
+            writer, format_simple_error(f"ERR unknown string command: {command}")
+        )
 
 
-async def _handle_set(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+async def _handle_set(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the SET command.
 
@@ -54,27 +58,44 @@ async def _handle_set(writer: asyncio.StreamWriter, args: list, storage: DataSto
 
     expiry_flags = {"EX", "PX", "EXAT", "PXAT", "KEEPTTL"}
     if any(flag in upper_args for flag in expiry_flags):
-        if "EX" in upper_args: # Expiry in seconds
-            expiry_amount: int = int(args[upper_args.index("EX") + 1]) if (upper_args.index("EX") + 1) < len(upper_args) else 0
+        if "EX" in upper_args:  # Expiry in seconds
+            expiry_amount: int = (
+                int(args[upper_args.index("EX") + 1])
+                if (upper_args.index("EX") + 1) < len(upper_args)
+                else 0
+            )
 
             expiry_time: float = time.time() + expiry_amount
 
-        elif "PX" in upper_args: # Expiry in milliseconds
-            expiry_amount: int = int(args[upper_args.index("PX") + 1]) if (upper_args.index("PX") + 1) < len(upper_args) else 0
+        elif "PX" in upper_args:  # Expiry in milliseconds
+            expiry_amount: int = (
+                int(args[upper_args.index("PX") + 1])
+                if (upper_args.index("PX") + 1) < len(upper_args)
+                else 0
+            )
 
-            expiry_time: float = time.time() + (expiry_amount / 1000)  # Convert milliseconds to seconds
+            expiry_time: float = time.time() + (
+                expiry_amount / 1000
+            )  # Convert milliseconds to seconds
 
-        elif "EXAT" in upper_args: # Expiry at specific unix time in seconds
-            expiry_time = float(args[upper_args.index("EXAT") + 1]) if (upper_args.index("EXAT") + 1) < len(upper_args) else 0.0
+        elif "EXAT" in upper_args:  # Expiry at specific unix time in seconds
+            expiry_time = (
+                float(args[upper_args.index("EXAT") + 1])
+                if (upper_args.index("EXAT") + 1) < len(upper_args)
+                else 0.0
+            )
 
-        elif "PXAT" in upper_args: # Expiry at specific unix time in milliseconds
+        elif "PXAT" in upper_args:  # Expiry at specific unix time in milliseconds
+            # Convert milliseconds to seconds to match the rest of the time code
+            expiry_time = (
+                float(args[upper_args.index("PXAT") + 1]) / 1000
+                if (upper_args.index("PXAT") + 1) < len(upper_args)
+                else 0.0
+            )
 
-            # Convert milliseconds to seconds to match the rest of the time code 
-            expiry_time = float(args[upper_args.index("PXAT") + 1]) / 1000 if (upper_args.index("PXAT") + 1) < len(upper_args) else 0.0
-
-        elif "KEEPTTL" in upper_args: # Keep existing TTL, if any
+        elif "KEEPTTL" in upper_args:  # Keep existing TTL, if any
             existing_ttl = await storage.get_ttl(key)
-            
+
             if existing_ttl is not None:
                 expiry_time = existing_ttl
             else:
@@ -93,7 +114,10 @@ async def _handle_set(writer: asyncio.StreamWriter, args: list, storage: DataSto
 
         await write_and_drain(writer, format_simple_string("OK"))
 
-async def _handle_get(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+
+async def _handle_get(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the GET command.
 
@@ -110,7 +134,9 @@ async def _handle_get(writer: asyncio.StreamWriter, args: list, storage: DataSto
         logging.info(f"Sent GET response: {key} = {value}")
     else:
         # Should return null bulk string -> $-1\r\n
-        writer.write(format_null_bulk_string()) # Null bulk string (shows key doesn't exist)
+        writer.write(
+            format_null_bulk_string()
+        )  # Null bulk string (shows key doesn't exist)
         logging.info(f"Key {key} not found")
 
     await writer.drain()  # Flush write buffer

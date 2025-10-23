@@ -28,16 +28,20 @@ async def handle_stream_commands(
         "XADD": _handle_xadd,
         "XRANGE": _handle_xrange,
     }
-    
+
     handler = commands_dict.get(command.upper())
     if handler:
         await handler(writer, args, storage)
     else:
         logging.info(f"Unknown stream command: {command}")
-        await write_and_drain(writer, format_simple_error(f"ERR unknown stream command: {command}"))
+        await write_and_drain(
+            writer, format_simple_error(f"ERR unknown stream command: {command}")
+        )
 
 
-async def _handle_xadd(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+async def _handle_xadd(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the XADD command.
 
@@ -66,14 +70,19 @@ async def _handle_xadd(writer: asyncio.StreamWriter, args: list, storage: DataSt
     try:
         entry_id: str = await storage.xadd(key, id, field_value_pairs)
         logging.info(f"XADD: {key}, id: {id}, field-value pairs: {field_value_pairs}")
-        writer.write(format_bulk_string_success(entry_id)) # Requires bulk string response
+        writer.write(
+            format_bulk_string_success(entry_id)
+        )  # Requires bulk string response
     except ValueError as e:
         logging.error(f"XADD: Error adding entry to stream {key}: {e}")
-        writer.write(format_simple_error(e)) # Error response -> Should have ERR in it
-        
+        writer.write(format_simple_error(e))  # Error response -> Should have ERR in it
+
     await writer.drain()  # Flush write buffer
 
-async def _handle_xrange(writer: asyncio.StreamWriter, args: list, storage: DataStorage) -> None:
+
+async def _handle_xrange(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
     """
     Handles the XRANGE command.
 
@@ -89,7 +98,9 @@ async def _handle_xrange(writer: asyncio.StreamWriter, args: list, storage: Data
 
     start: str = args[1] if args_len > 1 else "-"
     end: str = args[2] if args_len > 2 else "+"
-    count: int | None = int(args[4]) if args_len > 4 and args[3].upper() == "COUNT" else None
+    count: int | None = (
+        int(args[4]) if args_len > 4 and args[3].upper() == "COUNT" else None
+    )
 
     logging.info(f"XRANGE: {key}, start: {start}, end: {end}, count: {count}")
 
@@ -111,11 +122,14 @@ async def _handle_xrange(writer: asyncio.StreamWriter, args: list, storage: Data
 
         response: bytes = b""
 
-        response += b"*" + str(len(entries)).encode("utf-8") + b"\r\n" # RESP array header
-
+        response += (
+            b"*" + str(len(entries)).encode("utf-8") + b"\r\n"
+        )  # RESP array header
 
         for entry in entries:
-            response += b"*" + str(len(entry)).encode("utf-8") + b"\r\n" # Inner array header
+            response += (
+                b"*" + str(len(entry)).encode("utf-8") + b"\r\n"
+            )  # Inner array header
             for item in entry:
                 if isinstance(item, list):
                     # List of field-value pairs
@@ -125,10 +139,12 @@ async def _handle_xrange(writer: asyncio.StreamWriter, args: list, storage: Data
                     response += format_bulk_string_success(item)
 
         logging.info(f"XRANGE: Formatted RESP array response: {response}")
-        writer.write(response) # RESP array response
-        logging.info(f"XRANGE: Wrote array response for {key} with {len(entries)} entries")
+        writer.write(response)  # RESP array response
+        logging.info(
+            f"XRANGE: Wrote array response for {key} with {len(entries)} entries"
+        )
     except ValueError as e:
         logging.error(f"XRANGE: Error retrieving entries from stream {key}: {e}")
-        writer.write(format_simple_error(e)) # Error response -> Should have ERR in it
+        writer.write(format_simple_error(e))  # Error response -> Should have ERR in it
 
     await writer.drain()  # Flush write buffer
