@@ -1,18 +1,17 @@
 import asyncio
 import logging
-
 from typing import Type
+
+from app.data_storage import DataStorage
 
 # Internal imports
 from app.format_response import (
-    format_simple_string,
     format_bulk_string_success,
     format_integer_success,
     format_simple_error,
+    format_simple_string,
 )
-from app.data_storage import DataStorage
-from app.utils import write_and_drain
-from app.utils import OrderedSet
+from app.utils import OrderedSet, write_and_drain
 
 
 async def handle_basic_commands(
@@ -108,7 +107,9 @@ async def _handle_type(
     """
     key: str = args[0] if len(args) > 0 else ""
 
-    key_type: Type[None | str | list | dict | OrderedSet] | None = await storage.key_type(key)
+    key_type: (
+        Type[None | str | list | dict | OrderedSet] | None
+    ) = await storage.key_type(key)
 
     logging.info(f"TYPE: {key} is of type {key_type}")
 

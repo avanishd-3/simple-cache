@@ -158,7 +158,9 @@ class DataStorage:
             return key in self.storage_dict
 
     # TODO: Add support for set, zset, hash, stream
-    async def key_type(self, key: str) -> type[None | str | list | dict | OrderedSet] | None:
+    async def key_type(
+        self, key: str
+    ) -> type[None | str | list | dict | OrderedSet] | None:
         """
         Return type of key
         """
@@ -889,7 +891,7 @@ class DataStorage:
 
         async with self.lock:
             source_item = self.storage_dict.get(source, None)
-            destination_item : OrderedSet | None = None
+            destination_item: OrderedSet | None = None
 
             if source_item is None:
                 logging.info(f"Source key not found: {source}")
