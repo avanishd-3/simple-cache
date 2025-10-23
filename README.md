@@ -62,6 +62,26 @@ The supported commands and their differences compared to the Redis versions are 
 
 <details>
 
+   <summary>Set commands</summary>
+
+   | Command | Deviation from Redis            |
+   | ------- | ------------------------------- |
+   | SADD    | None |
+   | SCARD  | None                            |
+   | SDIFF  | None                            |
+   | SDIFFSTORE  | None                            |
+   | SINTER  | None                            |
+   | SINTERSTORE  | None                            |
+   | SUNION  | None                            |
+   | SUNIONSTORE  | None                            |
+   | SISMEMBER  | None                            |
+   | SMEMBERS  | None                            |
+   | SMOVE  | None                            |
+   | SREM  | None                            |
+</details>
+
+<details>
+
    <summary>Other commands</summary>
 
 
