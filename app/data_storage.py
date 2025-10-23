@@ -10,8 +10,8 @@ import heapq
 from copy import copy
 
 # Internal imports
-from app.utils.ordered_set import OrderedSet
-from app.utils.error_strings import WRONG_TYPE_STRING
+from app.utils import OrderedSet
+from app.utils import WRONG_TYPE_STRING
 
 ValueWithExpiry = namedtuple("ValueWithExpiry", ["value", "expiry_time"])
 BlockedClientFutureResult = namedtuple("BlockedClientFutureResult", ["key", "removed_item", "timestamp"])

@@ -3,10 +3,8 @@ import asyncio
 import time
 
 from app.main import main
-from app.utils.writer_utils import close_writer, write_and_drain
-from app.utils.error_strings import WRONG_TYPE_STRING
-
-WRONG_TYPE_STRING_BYTE_CODE = b'-' + WRONG_TYPE_STRING.encode('utf-8') + b'\r\n'
+from app.utils import close_writer, write_and_drain
+from app.utils import WRONG_TYPE_STRING
 
 
 

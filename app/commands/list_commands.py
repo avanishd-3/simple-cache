@@ -10,7 +10,8 @@ from app.format_response import (
     format_simple_error,
 )
 from app.data_storage import DataStorage
-from app.utils.writer_utils import write_and_drain
+from app.utils import write_and_drain
+
 
 async def handle_list_commands(
     writer: asyncio.StreamWriter, command: str, args: list, storage: DataStorage

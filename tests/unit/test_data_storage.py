@@ -5,7 +5,7 @@ import time
 from unittest.mock import Mock, patch
 
 from app.data_storage import DataStorage, WrongTypeError
-from app.utils.ordered_set import OrderedSet
+from app.utils import OrderedSet
 
 from typing import Type
 
