@@ -10,6 +10,7 @@ from app.format_response import (
 from app.data_storage import DataStorage
 from app.utils.writer_utils import write_and_drain
 from app.utils.ordered_set import OrderedSet
+from app.utils.error_strings import WRONG_TYPE_STRING
 from app.data_storage import WrongTypeError
 
 async def handle_set_commands(
@@ -79,7 +80,8 @@ async def _handle_scard(writer: asyncio.StreamWriter, args: list, storage: DataS
     Handles the SCARD command.
 
     SCARD returns the set cardinality (number of elements) of the set stored at key.
-        If the key does not exist, return0 is returned.
+        If the key does not exist, 0 is returned.
+        If the key exists but does not hold a set, an error is returned.
 
     Args:
         writer (asyncio.StreamWriter): The StreamWriter to write the response to.
@@ -96,7 +98,11 @@ async def _handle_scard(writer: asyncio.StreamWriter, args: list, storage: DataS
 
     logging.info(f"SCARD: {key}")
 
-    cardinality: int = await storage.scard(key)
+    try:
+        cardinality: int = await storage.scard(key)
+    except WrongTypeError as e:
+       await write_and_drain(writer, format_simple_error(str(e)))
+       return
 
     await write_and_drain(writer, format_integer_success(cardinality))
 
@@ -106,6 +112,7 @@ async def _handle_sdiff(writer: asyncio.StreamWriter, args: list, storage: DataS
 
     SDIFF returns the members of the set resulting from the difference between the first set and all the successive sets.
         If the key does not exist, it is considered an empty set.
+        If the key exists but does not hold a set, an error is returned.
 
     Args:
         writer (asyncio.StreamWriter): The StreamWriter to write the response to.
@@ -123,7 +130,11 @@ async def _handle_sdiff(writer: asyncio.StreamWriter, args: list, storage: DataS
 
     logging.info(f"SDIFF: {keys}")
 
-    difference_members: OrderedSet = await storage.sdiff(keys)
+    try:
+        difference_members: OrderedSet = await storage.sdiff(keys)
+    except WrongTypeError as e:
+       await write_and_drain(writer, format_simple_error(str(e)))
+       return
 
     if not difference_members:
         await write_and_drain(writer, format_resp_array([])) # No members in set
@@ -153,7 +164,12 @@ async def _handle_sdiff_store(writer: asyncio.StreamWriter, args: list, storage:
 
     logging.info(f"SDIFFSTORE: {keys}")
 
-    difference_members: OrderedSet = await storage.sdiff(keys)
+    try:
+        difference_members: OrderedSet = await storage.sdiff(keys)
+    except WrongTypeError as e:
+       await write_and_drain(writer, format_simple_error(str(e)))
+       return
+    
     await storage.set_overwrite(destination, difference_members)
 
     # RESP returns the number of members in the resulting set
@@ -168,6 +184,7 @@ async def _handle_sinter(writer: asyncio.StreamWriter, args: list, storage: Data
 
     SINTER returns the members of the set resulting from the intersection between all the sets.
         If the key does not exist, it is considered an empty set.
+        If the key exists but does not hold a set, an error is returned.
 
     Args:
         writer (asyncio.StreamWriter): The StreamWriter to write the response to.
@@ -185,7 +202,11 @@ async def _handle_sinter(writer: asyncio.StreamWriter, args: list, storage: Data
 
     logging.info(f"SINTER: {keys}")
 
-    intersection_members: OrderedSet= await storage.sinter(keys)
+    try:
+        intersection_members: OrderedSet = await storage.sinter(keys)
+    except WrongTypeError as e:
+       await write_and_drain(writer, format_simple_error(str(e)))
+       return
 
     if not intersection_members:
         await write_and_drain(writer, format_resp_array([])) # No members in set
@@ -215,7 +236,12 @@ async def _handle_sinter_store(writer: asyncio.StreamWriter, args: list, storage
 
     logging.info(f"SINTERSTORE: {keys}")
 
-    intersection_members: OrderedSet = await storage.sinter(keys)
+    try:
+        intersection_members: OrderedSet = await storage.sinter(keys)
+    except WrongTypeError as e:
+       await write_and_drain(writer, format_simple_error(str(e)))
+       return
+    
     await storage.set_overwrite(destination, intersection_members)
 
     # RESP returns the number of members in the resulting set
@@ -230,6 +256,7 @@ async def _handle_sunion(writer: asyncio.StreamWriter, args: list, storage: Data
 
     SUNION returns the members of the set resulting from the union of all the sets.
         If the key does not exist, it is considered an empty set.
+        If the key exists but does not hold a set, an error is returned.
 
     Args:
         writer (asyncio.StreamWriter): The StreamWriter to write the response to.
@@ -247,8 +274,12 @@ async def _handle_sunion(writer: asyncio.StreamWriter, args: list, storage: Data
 
     logging.info(f"SUNION: {keys}")
 
-    union_members: OrderedSet = await storage.sunion(keys)
-
+    try:
+        union_members: OrderedSet = await storage.sunion(keys)
+    except WrongTypeError as e:
+       await write_and_drain(writer, format_simple_error(str(e)))
+       return
+    
     if not union_members:
         await write_and_drain(writer, format_resp_array([])) # No members in set
     else:
@@ -277,7 +308,12 @@ async def _handle_sunion_store(writer: asyncio.StreamWriter, args: list, storage
 
     logging.info(f"SUNIONSTORE: {keys}")
 
-    union_members: OrderedSet = await storage.sunion(keys)
+    try:
+        union_members: OrderedSet = await storage.sunion(keys)
+    except WrongTypeError as e:
+       await write_and_drain(writer, format_simple_error(str(e)))
+       return
+
     await storage.set_overwrite(destination, union_members)
 
     if not union_members:
@@ -322,6 +358,7 @@ async def _handle_smembers(writer: asyncio.StreamWriter, args: list, storage: Da
 
     SMEMBERS returns all the members of the set value stored at key.
         If the key does not exist, an empty set is returned.
+        If the key exists but does not hold a set, an error is returned.
 
     Args:
         writer (asyncio.StreamWriter): The StreamWriter to write the response to.
@@ -340,8 +377,10 @@ async def _handle_smembers(writer: asyncio.StreamWriter, args: list, storage: Da
 
     set_members: OrderedSet = await storage.get(key)
 
-    if not set_members or not isinstance(set_members, OrderedSet):
+    if not set_members:
         await write_and_drain(writer, format_resp_array([])) # No members in set or key does not exist/is not a set
+    elif not isinstance(set_members, OrderedSet): # What Redis does
+        await write_and_drain(writer, format_simple_error(WRONG_TYPE_STRING))
     else:
         await write_and_drain(writer, format_resp_array(set_members))
 
@@ -351,6 +390,7 @@ async def _handle_smove(writer: asyncio.StreamWriter, args: list, storage: DataS
 
     SMOVE moves member from the set at source to the set at destination. This operation is atomic for the other clients.
         If the source set does not exist, no operation is performed and 0 is returned.
+        If the source exists but does not hold a set, an error is returned.
         If the destination set does not exist, it is created before the operation is performed.
         
     Args:
@@ -370,7 +410,11 @@ async def _handle_smove(writer: asyncio.StreamWriter, args: list, storage: DataS
 
     logging.info(f"SMOVE: {source}, {destination}, {member}")
 
-    moved: bool = await storage.smove(source, destination, member)
+    try:
+        moved: bool = await storage.smove(source, destination, member)
+    except WrongTypeError as e:
+        await write_and_drain(writer, format_simple_error(str(e)))
+        return
 
     if moved:
         await write_and_drain(writer, format_integer_success(1))

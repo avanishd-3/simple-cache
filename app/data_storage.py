@@ -11,13 +11,14 @@ from copy import copy
 
 # Internal imports
 from app.utils.ordered_set import OrderedSet
+from app.utils.error_strings import WRONG_TYPE_STRING
 
 ValueWithExpiry = namedtuple("ValueWithExpiry", ["value", "expiry_time"])
 BlockedClientFutureResult = namedtuple("BlockedClientFutureResult", ["key", "removed_item", "timestamp"])
 
 class WrongTypeError(TypeError):
     def __init__(self):
-        super().__init__("ERR WRONGTYPE Operation against a key holding the wrong kind of value")
+        super().__init__(WRONG_TYPE_STRING)
 
 class DataStorage():
     """
@@ -653,15 +654,19 @@ class DataStorage():
         Return the set cardinality (number of elements) of the set stored at key.
 
         If the key does not exist, return 0.
+        If the key exists but is not a set, raise WrongTypeError.
         """
         async with self.lock:
             item = self.storage_dict.get(key, None)
             if item is not None and isinstance(item.value, OrderedSet):
                 logging.info(f"Retrieved cardinality for key '{key}': {len(item.value)}")
                 return len(item.value)
-            else:
-                logging.info(f"Key not found or not a set: {key}")
+            elif item is None:
+                logging.info(f"Key not found: {key}")
                 return 0
+            else:
+                logging.info(f"Key not a set: {key}")
+                raise WrongTypeError()  # RESP specification returns error for this
             
     async def sdiff(self, keys: list) -> OrderedSet:
         """
@@ -669,15 +674,20 @@ class DataStorage():
 
         If the first set does not exist, return an empty set.
 
+        If any of the keys exist but are not sets, raise WrongTypeError.
+
         Assumes keys has at least one element b/c command handler checks for this
         """
 
         async with self.lock:
             first_key = keys[0]
             first_set_item = self.storage_dict.get(first_key, None)
-            if first_set_item is None or not isinstance(first_set_item.value, OrderedSet):
-                logging.info(f"First key not found or not a set: {first_key}")
+            if first_set_item is None:
+                logging.info(f"First key not found: {first_key}")
                 return OrderedSet()  # RESP specification returns empty array for this
+            elif not isinstance(first_set_item.value, OrderedSet):
+                logging.info(f"First key not a set: {first_key}")
+                raise WrongTypeError()  # RESP specification returns error for this
 
             result_set: OrderedSet = copy(first_set_item.value)
 
@@ -685,6 +695,9 @@ class DataStorage():
                 item = self.storage_dict.get(key, None)
                 if item is not None and isinstance(item.value, OrderedSet):
                     result_set.difference_update(item.value)
+                elif not isinstance(item.value, OrderedSet):
+                    logging.info(f"Key not a set: {key}")
+                    raise WrongTypeError()  # RESP specification returns error for this
 
             logging.info(f"Set difference for keys {keys}: {result_set}")
             return result_set
@@ -694,6 +707,8 @@ class DataStorage():
         Return intersection of all sets.
 
         If the first set does not exist, return an empty set.
+        If any of the keys exist but are not sets, raise WrongTypeError.
+
 
         Assumes keys has at least one element b/c command handler checks for this
         """
@@ -702,20 +717,27 @@ class DataStorage():
 
             first_key = keys[0]
             first_set_item = self.storage_dict.get(first_key, None)
-            if first_set_item is None or not isinstance(first_set_item.value, OrderedSet):
+            if first_set_item is None:
                 logging.info(f"First key not found or not a set: {first_key}")
                 return OrderedSet()  # RESP specification returns empty array for this
+            elif not isinstance(first_set_item.value, OrderedSet):
+                logging.info(f"First key not a set: {first_key}")
+                raise WrongTypeError()  # RESP specification returns error for this
+        
 
             result_set: OrderedSet = copy(first_set_item.value)
 
             for key in keys[1:]:
                 item = self.storage_dict.get(key, None)
-                if item is not None and isinstance(item.value, OrderedSet):
-                    result_set.intersection_update(item.value)
-                else:
+                if item is None:
                     # If any set doesn't exist, intersection is empty set
                     logging.info(f"Key not found or not a set: {key}, intersection is empty set")
                     return OrderedSet()
+                if item is not None and isinstance(item.value, OrderedSet):
+                    result_set.intersection_update(item.value)
+                elif not isinstance(item.value, OrderedSet):
+                    logging.info(f"Key not a set: {key}")
+                    raise WrongTypeError()  # RESP specification returns error for this
 
             logging.info(f"Set intersection for keys {keys}: {result_set}")
             return result_set
@@ -723,6 +745,7 @@ class DataStorage():
     async def sunion(self, keys: list) -> OrderedSet:
         """
         Return union of all sets. Non-existent keys are treated as empty sets (so they are ignored).
+        Keys that exist but are not sets raise WrongTypeError.
         """
 
         async with self.lock:
@@ -731,8 +754,15 @@ class DataStorage():
 
             for key in keys:
                 item = self.storage_dict.get(key, None)
+                if item is None:
+                    # Non-existent key
+                    logging.info(f"Key not found (treated as empty set): {key}")
+                    continue
                 if item is not None and isinstance(item.value, OrderedSet):
                     result_set.update(item.value)
+                elif not isinstance(item.value, OrderedSet):
+                    logging.info(f"Key not a set: {key}")
+                    raise WrongTypeError()  # RESP specification returns error for this
 
             logging.info(f"Set union for keys {keys}: {result_set}")
             return result_set
@@ -742,6 +772,8 @@ class DataStorage():
         Move a member from the source set to the destination set.
 
         Return True if the element was moved, False if the element was not found in the source set.
+
+        If the source exists but is not a set, raise WrongTypeError. (Redis only checks this)
         """
 
         async with self.lock:
@@ -758,7 +790,10 @@ class DataStorage():
                 logging.info(f"Destination key not found: {destination}")
 
             # If source is not a set or doesn't exist or destination exists and is not a set, return False
-            if not isinstance(source_item, OrderedSet) or (destination_item is not None and not isinstance(destination_item, OrderedSet)):
+            if not isinstance(source_item, OrderedSet):
+                logging.info(f"Source key not a set: {source}")
+                raise WrongTypeError()  # RESP specification returns error for this
+            elif (destination_item is not None and not isinstance(destination_item, OrderedSet)):
                  logging.info("Source or destination is not a set, cannot perform SMOVE")
                  return False
         

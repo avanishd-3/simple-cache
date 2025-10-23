@@ -565,6 +565,11 @@ class SetDataStorageTests(BaseDataStorageTest):
         count = await self.storage.scard("myset")
         self.assertEqual(count, 3)
 
+    async def test_scard_error_when_existing_key_not_a_set(self):
+        await self.storage.set("notaset", "value")
+        with self.assertRaises(WrongTypeError):
+            await self.storage.scard("notaset")
+
     async def test_sdiff_non_existent_keys(self):
         result = await self.storage.sdiff(["nope", "a", "b"])
         self.assertEqual(result, set())
@@ -573,6 +578,18 @@ class SetDataStorageTests(BaseDataStorageTest):
         await self.storage.sadd("set2", ["a", "b"])
         result = await self.storage.sdiff(["nope", "set2"])
         self.assertEqual(result, set())
+
+    async def test_sdiff_error_when_first_key_not_a_set(self):
+        await self.storage.set("notaset", "value")
+        await self.storage.sadd("set2", ["a", "b"])
+        with self.assertRaises(WrongTypeError):
+            await self.storage.sdiff(["notaset", "set2"])
+
+    async def test_sdiff_error_when_non_first_key_not_a_set(self):
+        await self.storage.sadd("set1", ["a", "b"])
+        await self.storage.set("notaset", "value")
+        with self.assertRaises(WrongTypeError):
+            await self.storage.sdiff(["set1", "notaset"])
 
     async def test_sdiff_existing_sets(self):
         await self.storage.sadd("key1", ["a", "b", "c", "d"])
@@ -616,6 +633,18 @@ class SetDataStorageTests(BaseDataStorageTest):
         result = await self.storage.sinter(["key2", "nope", "key3"])
         self.assertEqual(result, set())
 
+    async def test_sinter_error_when_first_key_not_a_set(self):
+        await self.storage.set("notaset", "value")
+        await self.storage.sadd("set2", ["a", "b"])
+        with self.assertRaises(WrongTypeError):
+            await self.storage.sinter(["notaset", "set2"])
+
+    async def test_sinter_error_when_non_first_key_not_a_set(self):
+        await self.storage.sadd("set1", ["a", "b"])
+        await self.storage.set("notaset", "value")
+        with self.assertRaises(WrongTypeError):
+            await self.storage.sinter(["set1", "notaset"])
+
     async def test_sunion_basic(self):
         await self.storage.sadd("key1", ["a", "b", "c", "d"])
         await self.storage.sadd("key2", ["c"])
@@ -634,11 +663,17 @@ class SetDataStorageTests(BaseDataStorageTest):
         result = await self.storage.sunion(["key1", "nope"])
         self.assertEqual(result, {"a", "b"})
 
+    async def test_sunion_error_when_non_first_key_not_a_set(self):
+        await self.storage.sadd("set1", ["a", "b"])
+        await self.storage.set("notaset", "value")
+        with self.assertRaises(WrongTypeError):
+            await self.storage.sunion(["set1", "notaset"])
+
     async def test_smove_source_not_a_set(self):
         await self.storage.set("notaset", "value")
         await self.storage.sadd("destset", ["a", "b"])
-        result = await self.storage.smove("notaset", "destset", "value")
-        self.assertFalse(result)
+        with self.assertRaises(WrongTypeError):
+            await self.storage.smove("notaset", "destset", "value")
 
     async def test_smove_destination_not_a_set(self):
         await self.storage.set("notaset", "value")

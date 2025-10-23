@@ -1,0 +1,1 @@
+WRONG_TYPE_STRING = "ERR WRONGTYPE Operation against a key holding the wrong kind of value"
