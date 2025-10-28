@@ -82,6 +82,15 @@ The supported commands and their differences compared to the Redis versions are 
 
 <details>
 
+   <summary>Transaction commands</summary>
+
+   | Command | Deviation from Redis            |
+   | ------- | ------------------------------- |
+   | INCR    | None |
+</details>
+
+<details>
+
    <summary>Other commands</summary>
 
 
