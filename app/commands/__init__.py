@@ -4,3 +4,4 @@ from .list_commands import handle_list_commands as handle_list_commands
 from .stream_commands import handle_stream_commands as handle_stream_commands
 from .set_commands import handle_set_commands as handle_set_commands
 from .transaction_commands import handle_transaction_commands as handle_transaction_commands
+from .other_commands import handle_other_commands as handle_other_commands

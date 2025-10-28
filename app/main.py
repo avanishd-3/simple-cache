@@ -26,6 +26,7 @@ from app.utils import (
     STREAM_COMMANDS,
     SET_COMMANDS,
     TRANSACTION_COMMANDS,
+    OTHER_COMMANDS,
 )
 
 from app.commands import (
@@ -35,6 +36,7 @@ from app.commands import (
     handle_stream_commands,
     handle_set_commands,
     handle_transaction_commands,
+    handle_other_commands,
 )
 
 # Data
@@ -132,6 +134,10 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
             case cmd if cmd in TRANSACTION_COMMANDS:
                 logging.info(f"Handling transaction command: {cmd}")
                 await handle_transaction_commands(writer, cmd, args, storage_data)
+
+            case cmd if cmd in OTHER_COMMANDS:
+                logging.info(f"Handling other command: {cmd}")
+                await handle_other_commands(writer, cmd, args, storage_data)
 
             case "FLUSHDB":
                 logging.info("Handling FLUSHDB command")

@@ -5,6 +5,7 @@ from .command_types import (
     STREAM_COMMANDS as STREAM_COMMANDS,
     SET_COMMANDS as SET_COMMANDS,
     TRANSACTION_COMMANDS as TRANSACTION_COMMANDS,
+    OTHER_COMMANDS as OTHER_COMMANDS,
 )
 
 from .error_strings import (
