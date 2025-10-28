@@ -6,7 +6,10 @@ from .command_types import (
     SET_COMMANDS as SET_COMMANDS,
 )
 
-from .error_strings import WRONG_TYPE_STRING as WRONG_TYPE_STRING
+from .error_strings import (
+    WRONG_TYPE_STRING as WRONG_TYPE_STRING,
+    INCR_NON_INTEGER as INCR_NON_INTEGER
+)
 
 from .ordered_set import OrderedSet as OrderedSet
 

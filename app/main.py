@@ -18,13 +18,14 @@ from .data_storage import DataStorage
 from .utils.profiler import profile
 from .utils.writer_utils import close_writer, write_and_drain
 from .utils.conditional_decorator import conditional_decorator
-from .utils.command_types import BASIC_COMMANDS, STRING_COMMANDS, LIST_COMMANDS, STREAM_COMMANDS, SET_COMMANDS
+from .utils.command_types import BASIC_COMMANDS, STRING_COMMANDS, LIST_COMMANDS, STREAM_COMMANDS, SET_COMMANDS, TRANSACTION_COMMANDS
 
 from .commands.basic_commands import handle_basic_commands
 from .commands.string_commands import handle_string_commands
 from .commands.list_commands import handle_list_commands
 from .commands.stream_commands import handle_stream_commands
 from .commands.set_commands import handle_set_commands
+from .commands.transaction_commands import handle_transaction_commands
 
 # Data
 storage_data: DataStorage = DataStorage()
@@ -117,6 +118,10 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
             case cmd if cmd in SET_COMMANDS:
                 logging.info(f"Handling set command: {cmd}")
                 await handle_set_commands(writer, cmd, args, storage_data)
+
+            case cmd if cmd in TRANSACTION_COMMANDS:
+                logging.info(f"Handling transaction command: {cmd}")
+                await handle_transaction_commands(writer, cmd, args, storage_data)
 
             case "FLUSHDB":
                 logging.info("Handling FLUSHDB command")

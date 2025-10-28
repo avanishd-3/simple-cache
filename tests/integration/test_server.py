@@ -4,9 +4,10 @@ import time
 
 from app.main import main
 from app.utils import close_writer, write_and_drain
-from app.utils import WRONG_TYPE_STRING
+from app.utils import WRONG_TYPE_STRING, INCR_NON_INTEGER
 
 WRONG_TYPE_STRING_BYTE_CODE = b"-" + WRONG_TYPE_STRING.encode("utf-8") + b"\r\n"
+INCR_NON_INTEGER_BYTE_CODE = b"-" + INCR_NON_INTEGER.encode("utf-8") + b"\r\n"
 
 
 class TestServer(unittest.IsolatedAsyncioTestCase):
@@ -1131,6 +1132,61 @@ class SetTests(TestServer):
         response = await self.reader.read(300)
         self.assertEqual(response, b"*2\r\n$6\r\nvalue1\r\n$6\r\nvalue3\r\n")
 
+class TransactionTests(TestServer):
+    """
+    Test INCR command
+    """
+
+    async def test_incr_existing_key(self):
+        # Set initial value
+        await write_and_drain(
+            self.writer, b"*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$2\r\n41\r\n"
+        )
+        _ = await self.reader.read(100)
+
+        # Increment the key
+        await write_and_drain(self.writer, b"*2\r\n$4\r\nINCR\r\n$3\r\nfoo\r\n")
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":42\r\n")
+
+    async def test_incr_non_existent_key(self):
+        # Increment a non-existent key
+        await write_and_drain(self.writer, b"*2\r\n$4\r\nINCR\r\n$3\r\nbar\r\n")
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":1\r\n")  # Should initialize to 1
+
+        # Test that bar is saved
+        await write_and_drain(self.writer, b"*2\r\n$3\r\nGET\r\n$3\r\nbar\r\n")
+        response = await self.reader.read(100)
+        self.assertEqual(response, b"$1\r\n1\r\n")
+
+    async def test_incr_key_is_str_but_not_int(self):
+        # Set a non-integer string value
+        await write_and_drain(
+            self.writer, b"*3\r\n$3\r\nSET\r\n$3\r\nbaz\r\n$5\r\nhello\r\n"
+        )
+        _ = await self.reader.read(100)
+
+        # Try to increment the key
+        await write_and_drain(self.writer, b"*2\r\n$4\r\nINCR\r\n$3\r\nbaz\r\n")
+        response = await self.reader.read(100)
+        self.assertEqual(
+            response, INCR_NON_INTEGER_BYTE_CODE
+        )
+
+    async def test_incr_key_is_not_a_string(self):
+        # Set a key as a list
+        await write_and_drain(
+            self.writer, b"*4\r\n$5\r\nLPUSH\r\n$4\r\nmylist\r\n$5\r\nvalue\r\n"
+        )
+        _ = await self.reader.read(100)
+
+        # Try to increment the key
+        await write_and_drain(self.writer, b"*2\r\n$4\r\nINCR\r\n$6\r\nmylist\r\n")
+        response = await self.reader.read(100)
+        self.assertEqual(
+            response, WRONG_TYPE_STRING_BYTE_CODE
+        )
 
 class OtherCommandsTests(TestServer):
     """
