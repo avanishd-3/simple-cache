@@ -28,12 +28,14 @@ from app.utils import (
     TRANSACTION_COMMANDS,
 )
 
-from .commands.basic_commands import handle_basic_commands
-from .commands.string_commands import handle_string_commands
-from .commands.list_commands import handle_list_commands
-from .commands.stream_commands import handle_stream_commands
-from .commands.set_commands import handle_set_commands
-from .commands.transaction_commands import handle_transaction_commands
+from app.commands import (
+    handle_basic_commands,
+    handle_string_commands,
+    handle_list_commands,
+    handle_stream_commands,
+    handle_set_commands,
+    handle_transaction_commands,
+)
 
 # Data
 storage_data: DataStorage = DataStorage()
