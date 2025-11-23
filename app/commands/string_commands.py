@@ -94,7 +94,7 @@ async def _handle_set(
             )
 
         elif "KEEPTTL" in upper_args:  # Keep existing TTL, if any
-            existing_ttl = await storage.get_ttl(key)
+            existing_ttl = await storage.get_expiry_time(key)
 
             if existing_ttl is not None:
                 expiry_time = existing_ttl

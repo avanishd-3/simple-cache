@@ -114,35 +114,40 @@ class DataStorage:
             )
             future.set_result(new_blocked_info)
 
-    async def get_ttl(self, key: str) -> float | None:
+    async def set_ttl(self, key: str, expiry_time: float | None) -> bool:
         """
-        Get the time-to-live (TTL) for a key.
-
-        This is only used for set KEEPTTL option.
+        Set the time-to-live (TTL) for a key.
         """
         async with self.lock:
-            # Do passive check: Delete expired keys when they are accessed
-            logging.info(f"Retrieving TTL for key: {key}")
+            logging.info(f"Setting TTL for key: {key} to {expiry_time}")
+            item = self.storage_dict.get(key, None)
+            if item is not None:
+                new_item = ValueWithExpiry(
+                    value=item.value,
+                    expiry_time=expiry_time
+                )
+                self.storage_dict[key] = new_item # Update value in storage
+
+                return True
+            else:
+                logging.info(f"Key not found when setting TTL: {key}")
+                return False
+
+    async def get_expiry_time(self, key: str) -> float | None:
+        """
+        Get the expiry time for a key.
+        """
+        async with self.lock:
+            # Do not do passive check since this is used for EXPIRE command
+            logging.info(f"Retrieving expiry time for key: {key}")
 
             item = self.storage_dict.get(key, None)
-            curr_time = time.time()
-
-            if (
-                item is not None
-                and item.expiry_time is not None
-                and curr_time > item.expiry_time
-            ):
-                logging.info(
-                    f"Difference b/n curr time and expiry time: {curr_time - item.expiry_time}"
-                )
-                logging.info(f"Deleting expired key: {key}")
-                return None
 
             if item is not None:
-                logging.info(f"Retrieved TTL for key '{key}': {item.expiry_time}")
+                logging.info(f"Retrieved expiry time for key '{key}': {item.expiry_time}")
                 return item.expiry_time
             else:
-                logging.info(f"Key not found when retrieving TTL: {key}")
+                logging.info(f"Key not found when retrieving expiry time: {key}")
                 return None
 
     ############################################### General ####################################################

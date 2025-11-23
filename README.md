@@ -98,6 +98,8 @@ The supported commands and their differences compared to the Redis versions are 
    | -------- | -------------------------------------------------------------------------- |
    | FLUSHDB  | None                                                                       |
    | SHUTDOWN | No optional arguments supported<br><br>Does not fail b/c no saving to disk<br><br>Signal handling not implemented |
+   | TTL  | None                                                                       |
+   | EXPIRE  | None                                                                       |
 </details>
 
 ## Configuration Options

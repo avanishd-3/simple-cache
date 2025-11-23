@@ -7,7 +7,7 @@ from app.format_response import (
     format_integer_success,
 )
 from app.data_storage import DataStorage
-from app.utils import write_and_drain, WRONG_TYPE_STRING, INCR_NON_INTEGER
+from app.utils import write_and_drain, WRONG_TYPE_STRING, NOT_AN_INTEGER
 
 
 async def handle_transaction_commands(
@@ -54,7 +54,7 @@ async def _handle_incr(
         if isinstance(value, str) and not value.isdigit():
             await write_and_drain(
                 writer,
-                format_simple_error(INCR_NON_INTEGER),
+                format_simple_error(NOT_AN_INTEGER),
             )
             logging.info(f"INCR: Non-integer value for key {key}")
             return

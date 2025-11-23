@@ -29,11 +29,11 @@ class HelperFunctionsTests(BaseDataStorageTest):
         await self.storage.set(
             "temp_key", "value", expiry_time=mock_time.return_value + 1000
         )  # Expiry time in the future
-        ttl = await self.storage.get_ttl("temp_key")
+        ttl = await self.storage.get_expiry_time("temp_key")
         self.assertEqual(ttl, mock_time.return_value + 1000)
 
     async def test_get_ttl_nonexistent_key(self):
-        ttl = await self.storage.get_ttl("doesnotexist")
+        ttl = await self.storage.get_expiry_time("doesnotexist")
         self.assertIsNone(ttl)
 
 
@@ -755,7 +755,7 @@ class SetDataStorageTests(BaseDataStorageTest):
 
 class OtherDataStorageTests(BaseDataStorageTest):
     """
-    FLUSHDB tests
+    FLUSHDB, EXPIRE tests
     """
 
     async def test_flushdb_sync(self):
@@ -767,6 +767,23 @@ class OtherDataStorageTests(BaseDataStorageTest):
         await self.storage.set("key2", "value2")
         await self.storage.flushdb_async()
         self.assertEqual(len(self.storage.storage_dict), 0)
+
+    @patch("time.time", mock_time)  # This just makes it easier to test expiry times
+    async def test_expire_existing_key(self):
+        await self.storage.set("temp_key", "value")
+        result = await self.storage.set_ttl(
+            "temp_key", expiry_time=time.time() + 500
+        )  # Expiry time in the future
+        self.assertTrue(result)
+        ttl = await self.storage.get_expiry_time("temp_key")
+        self.assertEqual(ttl, time.time() + 500)
+
+    @patch("time.time", mock_time)  # This just makes it easier to test expiry times
+    async def test_expire_nonexistent_key(self):
+        result = await self.storage.set_ttl(
+            "nope", expiry_time=time.time() + 500
+        )  # Expiry time in the future
+        self.assertFalse(result)
 
 
 if __name__ == "__main__":

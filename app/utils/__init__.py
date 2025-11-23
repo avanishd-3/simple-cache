@@ -10,7 +10,7 @@ from .command_types import (
 
 from .error_strings import (
     WRONG_TYPE_STRING as WRONG_TYPE_STRING,
-    INCR_NON_INTEGER as INCR_NON_INTEGER
+    NOT_AN_INTEGER as NOT_AN_INTEGER
 )
 
 from .ordered_set import OrderedSet as OrderedSet

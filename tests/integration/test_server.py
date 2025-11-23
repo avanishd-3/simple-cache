@@ -2,12 +2,17 @@ import unittest
 import asyncio
 import time
 
+from unittest.mock import Mock, patch
+
 from app.main import main
 from app.utils import close_writer, write_and_drain
-from app.utils import WRONG_TYPE_STRING, INCR_NON_INTEGER
+from app.utils import WRONG_TYPE_STRING, NOT_AN_INTEGER
 
 WRONG_TYPE_STRING_BYTE_CODE = b"-" + WRONG_TYPE_STRING.encode("utf-8") + b"\r\n"
-INCR_NON_INTEGER_BYTE_CODE = b"-" + INCR_NON_INTEGER.encode("utf-8") + b"\r\n"
+NON_INTEGER_BYTE_CODE = b"-" + NOT_AN_INTEGER.encode("utf-8") + b"\r\n"
+
+mock_time = Mock()
+mock_time.return_value = 1234567890.0
 
 
 class TestServer(unittest.IsolatedAsyncioTestCase):
@@ -1171,7 +1176,7 @@ class TransactionTests(TestServer):
         await write_and_drain(self.writer, b"*2\r\n$4\r\nINCR\r\n$3\r\nbaz\r\n")
         response = await self.reader.read(100)
         self.assertEqual(
-            response, INCR_NON_INTEGER_BYTE_CODE
+            response, NON_INTEGER_BYTE_CODE
         )
 
     async def test_incr_key_is_not_a_string(self):
@@ -1190,7 +1195,7 @@ class TransactionTests(TestServer):
 
 class OtherCommandsTests(TestServer):
     """
-    Test FLUSHDB and SHUTDOWN commands
+    Test FLUSHDB, SHUTDOWN, TTL, EXPIRE commands
     """
 
     async def test_flushdb_sync(self):
@@ -1230,6 +1235,260 @@ class OtherCommandsTests(TestServer):
         response = await self.reader.read(100)
         self.assertEqual(response, b"$-1\r\n")  # Key should not be found
 
+    async def test_ttl_non_existent_key(self):
+        await write_and_drain(
+            self.writer, b"*2\r\n$3\r\nTTL\r\n$7\r\nnokey\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":-2\r\n")  # Key does not exist
+
+    async def test_ttl_key_without_expiry(self):
+        # Set a key without expiry
+        await write_and_drain(
+            self.writer, b"*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n"
+        )
+        _ = await self.reader.read(100)
+
+        await write_and_drain(
+            self.writer, b"*2\r\n$3\r\nTTL\r\n$3\r\nkey\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":-1\r\n")  # Key exists but has no expiry
+
+    @patch("time.time", mock_time)
+    async def test_ttl_key_with_expiry(self):
+        # Set a key with expiry
+        await write_and_drain(
+            self.writer, b"*5\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n$2\r\nEX\r\n$2\r\n10\r\n"
+        )
+        _ = await self.reader.read(100)
+
+        await write_and_drain(
+            self.writer, b"*2\r\n$3\r\nTTL\r\n$3\r\nkey\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":10\r\n")  # Key has 10 seconds TTL
+
+    @patch("time.time", mock_time)
+    async def test_expire_non_existent_key(self):
+        await write_and_drain(
+            self.writer, b"*3\r\n$6\r\nEXPIRE\r\n$7\r\nnokey\r\n$2\r\n10\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":0\r\n")  # Key does not exist
+
+    async def test_expire_no_seconds_specified(self):
+        await write_and_drain(
+            self.writer, b"*2\r\n$6\r\nEXPIRE\r\n$7\r\nsomekey\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(
+            response, b"-ERR wrong number of arguments for 'expire' command\r\n"
+        )
+
+    async def test_expire_seconds_not_integer(self):
+        await write_and_drain(
+            self.writer, b"*3\r\n$6\r\nEXPIRE\r\n$7\r\nsomekey\r\n$3\r\nabc\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, NON_INTEGER_BYTE_CODE)
+
+    @patch("time.time", mock_time)
+    async def test_expire_basic(self):
+        await write_and_drain(
+            self.writer, b"*3\r\n$3\r\nSET\r\n$6\r\nmykey\r\n$5\r\nvalue\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*3\r\n$6\r\nEXPIRE\r\n$6\r\nmykey\r\n$2\r\n10\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":1\r\n")
+
+        # Verify that the key has the correct TTL
+        await write_and_drain(
+            self.writer, b"*2\r\n$3\r\nTTL\r\n$6\r\nmykey\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":10\r\n")
+
+    @patch("time.time", mock_time)
+    async def test_nx_no_expire_when_key_has_expiry(self):
+        await write_and_drain(
+            self.writer, b"*5\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n$2\r\nEX\r\n$2\r\n10\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*4\r\n$6\r\nEXPIRE\r\n$6\r\nkey\r\n$2\r\n20\r\n$2\r\nNX\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":0\r\n")
+
+        # Verify that the original expiry is still in place
+        await write_and_drain(
+            self.writer, b"*2\r\n$3\r\nTTL\r\n$3\r\nkey\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":10\r\n")
+
+    @patch("time.time", mock_time)
+    async def test_nx_expires_when_key_has_no_expiry(self):
+        await write_and_drain(
+            self.writer, b"*3\r\n$3\r\nSET\r\n$6\r\nmykey\r\n$5\r\nvalue\r\n$2\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*4\r\n$6\r\nEXPIRE\r\n$6\r\nmykey\r\n$2\r\n20\r\n$2\r\nNX\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":1\r\n")
+
+        # Verify that the new expiry is still in place
+        await write_and_drain(
+            self.writer, b"*2\r\n$3\r\nTTL\r\n$3\r\nmykey\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":20\r\n")
+
+    @patch("time.time", mock_time)
+    async def test_xx_no_expire_when_key_has_no_expiry(self):
+        await write_and_drain(
+            self.writer, b"*3\r\n$3\r\nSET\r\n$6\r\nmykey\r\n$5\r\nvalue\r\n$2\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*4\r\n$6\r\nEXPIRE\r\n$6\r\nmykey\r\n$2\r\n20\r\n$2\r\nXX\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":0\r\n")
+
+    @patch("time.time", mock_time)
+    async def test_xx_expire_when_key_has_expiry(self):
+        await write_and_drain(
+            self.writer, b"*5\r\n$3\r\nSET\r\n$6\r\nnewkey\r\n$5\r\nvalue\r\n$2\r\nEX\r\n$2\r\n20\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*4\r\n$6\r\nEXPIRE\r\n$6\r\nnewkey\r\n$2\r\n20\r\n$2\r\nXX\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":1\r\n")
+
+        # Verify that the new expiry is still in place
+        await write_and_drain(
+            self.writer, b"*2\r\n$3\r\nTTL\r\n$6\r\nnewkey\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":20\r\n")
+
+    @patch("time.time", mock_time)
+    async def test_gt_expire_when_new_expiry_is_greater(self):
+        await write_and_drain(
+            self.writer, b"*5\r\n$3\r\nSET\r\n$6\r\nmykey\r\n$5\r\nvalue\r\n$2\r\nEX\r\n$2\r\n10\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*4\r\n$6\r\nEXPIRE\r\n$6\r\nmykey\r\n$2\r\n20\r\n$2\r\nGT\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":1\r\n")
+
+        # Verify that the new expiry is still in place
+        await write_and_drain(
+            self.writer, b"*2\r\n$3\r\nTTL\r\n$6\r\nmykey\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":20\r\n")
+
+    @patch("time.time", mock_time)
+    async def test_gt_no_expire_when_new_expiry_is_less(self):
+        await write_and_drain(
+            self.writer, b"*5\r\n$3\r\nSET\r\n$6\r\nmykey\r\n$5\r\nvalue\r\n$2\r\nEX\r\n$2\r\n20\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*4\r\n$6\r\nEXPIRE\r\n$6\r\nmykey\r\n$2\r\n10\r\n$2\r\nGT\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":0\r\n")
+
+        # Verify that the original expiry is still in place
+        await write_and_drain(
+            self.writer, b"*2\r\n$3\r\nTTL\r\n$6\r\nmykey\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":20\r\n")
+
+    @patch("time.time", mock_time)
+    async def test_gt_no_expire_when_no_expiry(self):
+        await write_and_drain(
+            self.writer, b"*3\r\n$3\r\nSET\r\n$6\r\nmykey\r\n$5\r\nvalue\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*4\r\n$6\r\nEXPIRE\r\n$6\r\nmykey\r\n$2\r\n10\r\n$2\r\nGT\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":0\r\n")
+
+    @patch("time.time", mock_time)
+    async def test_lt_expire_when_new_expiry_is_less(self):
+        await write_and_drain(
+            self.writer, b"*5\r\n$3\r\nSET\r\n$6\r\nmykey\r\n$5\r\nvalue\r\n$2\r\nEX\r\n$2\r\n20\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*4\r\n$6\r\nEXPIRE\r\n$6\r\nmykey\r\n$2\r\n10\r\n$2\r\nLT\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":1\r\n")
+
+        # Verify that the new expiry is still in place
+        await write_and_drain(
+            self.writer, b"*2\r\n$3\r\nTTL\r\n$6\r\nmykey\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":10\r\n")
+
+    @patch("time.time", mock_time)
+    async def test_lt_expire_when_no_expiry(self):
+        await write_and_drain(
+            self.writer, b"*3\r\n$3\r\nSET\r\n$6\r\nmykey\r\n$5\r\nvalue\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*4\r\n$6\r\nEXPIRE\r\n$6\r\nmykey\r\n$2\r\n10\r\n$2\r\nLT\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":1\r\n")
+
+        # Verify that the new expiry is still in place
+        await write_and_drain(
+            self.writer, b"*2\r\n$3\r\nTTL\r\n$6\r\nmykey\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":10\r\n")
+
+    @patch("time.time", mock_time)
+    async def test_lt_no_expire_when_new_expiry_is_greater(self):
+        await write_and_drain(
+            self.writer, b"*5\r\n$3\r\nSET\r\n$6\r\nmykey\r\n$5\r\nvalue\r\n$2\r\nEX\r\n$2\r\n10\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*4\r\n$6\r\nEXPIRE\r\n$6\r\nmykey\r\n$2\r\n20\r\n$2\r\nLT\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":0\r\n")
+
+        # Verify that the original expiry is still in place
+        await write_and_drain(
+            self.writer, b"*2\r\n$3\r\nTTL\r\n$6\r\nmykey\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":10\r\n")
+
+    
 
 if __name__ == "__main__":
     unittest.main()
