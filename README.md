@@ -20,7 +20,7 @@ The supported commands and their differences compared to the Redis versions are 
    | ------- | ----------------------------------------- |
    | PING    | None   |
    | ECHO    | None                                      |
-   | TYPE    | Only supports strings, lists, and streams |
+   | TYPE    | Only supports strings, lists, streams, and sets |
    | EXISTS  | None                                      |
    | DEL     | None                                      |
 </details>
