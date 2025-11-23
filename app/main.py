@@ -5,14 +5,7 @@ import sys
 import signal
 import argparse
 
-# Type annotations
-from typing import Literal
-
 # Internal imports
-from .format_response import (
-    format_simple_string,
-)
-
 from .data_storage import DataStorage
 
 from app.utils import (
@@ -75,7 +68,6 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
 
         operation: str = command_list[0].upper() if command_list else ""
         args: list[str] = command_list[1:] if len(command_list) > 1 else []
-        args_len: int = len(args)
 
         logging.info(f"Operation: {operation}, Args: {args}")
 
@@ -139,26 +131,6 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                 logging.info(f"Handling other command: {cmd}")
                 await handle_other_commands(writer, cmd, args, storage_data)
 
-            case "FLUSHDB":
-                logging.info("Handling FLUSHDB command")
-
-                # Flushing is sync by default for Redis, so copying this behaviour
-                method: Literal["SYNC", "ASYNC", ""] | str = args[0] if args_len > 0 else ""
-
-                if method == "": # So logs show when default method is used
-                    logging.info("FLUSHDB with default method SYNC")
-                else:
-                    logging.info(f"FLUSHDB with method: {method}")
-
-                if method == "ASYNC":
-                    await storage_data.flushdb_async()
-                else:
-                    storage_data.flushdb_sync()
-                writer.write(format_simple_string("OK"))
-                try:
-                    await writer.drain()  # Flush write buffer
-                except ConnectionError: # This happens in the integration tests (I haven't found it in normal usage yet)
-                    logging.info("Client disconnected before FLUSHDB response could be sent")
             case _:
                 await write_and_drain(writer, b"-Error: Unknown command\r\n")
                 logging.info(f"Sent error response for unknown command: {operation}")
