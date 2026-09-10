@@ -10,6 +10,8 @@ from app.format_response import (
 from app.data_storage import DataStorage
 from app.utils import write_and_drain, WRONG_TYPE_STRING
 
+from app.data_storage import ValueWithExpiry
+
 
 
 async def handle_bitmap_commands(
@@ -54,14 +56,14 @@ async def _handle_setbit(
     value: str = args[2] if len(args) > 2 else ""
 
     # If the key exists and is not a string, return an error
-    if key in storage.storage_dict and not isinstance(storage.storage_dict[key], str):
+    if key in storage.storage_dict and not isinstance(storage.storage_dict[key].value, str):
         logging.info(f"Key {key} exists and is not a string")
         await write_and_drain(writer, format_simple_error(WRONG_TYPE_STRING))
         return
     
     # If key does not exist, create it as an 1 byte string (which is the minimum size for a bitmap)
     if key not in storage.storage_dict:
-        storage.storage_dict[key] = "\x00"  # Initialize with a single null byte
+        storage.storage_dict[key] = ValueWithExpiry("\x00", None)  # Initialize with a single null byte
         logging.info(f"Created new key: {key} as an empty string")
 
     # Convert offset and value to integers
@@ -86,15 +88,18 @@ async def _handle_setbit(
         bit_position: int = offset_int % 8
 
         # Ensure the string is long enough to accommodate the offset
-        current_length: int = len(storage.storage_dict[key])
+        current_length: int = len(storage.storage_dict[key].value)
         if byte_index >= current_length:
             # Extend the string with null bytes if necessary
             async with storage.lock:
-                storage.storage_dict[key] += "\x00" * (byte_index - current_length + 1)
+                storage.storage_dict[key] = ValueWithExpiry(
+                    storage.storage_dict[key].value + "\x00" * (byte_index - current_length + 1),
+                    storage.storage_dict[key].expiry_time
+                )
             logging.info(f"Extended key {key} to accommodate offset {offset_int}")
 
         # Get the current byte and modify the specific bit
-        current_byte: int = ord(storage.storage_dict[key][byte_index])
+        current_byte: int = ord(storage.storage_dict[key].value[byte_index])
         if value_int == 1:
             new_byte: int = current_byte | (1 << (7 - bit_position))  # Set the bit
         else:
@@ -103,10 +108,11 @@ async def _handle_setbit(
         
         # Update the string with the new byte
         async with storage.lock:
-            storage.storage_dict[key] = (
-                storage.storage_dict[key][:byte_index]
+            storage.storage_dict[key] = ValueWithExpiry(
+                storage.storage_dict[key].value[:byte_index]
                 + chr(new_byte)
-                + storage.storage_dict[key][byte_index + 1:]
+                + storage.storage_dict[key].value[byte_index + 1:],
+                storage.storage_dict[key].expiry_time
             )
 
         logging.info(f"SETBIT command executed: key={key}, offset={offset_int}, value={value_int}")
@@ -141,7 +147,7 @@ async def _handle_getbit(
     offset: str = args[1] if len(args) > 1 else ""
 
     # If the key exists and is not a string, return an error
-    if key in storage.storage_dict and not isinstance(storage.storage_dict[key], str):
+    if key in storage.storage_dict and not isinstance(storage.storage_dict[key].value, str):
         logging.info(f"Key {key} exists and is not a string")
         await write_and_drain(writer, format_simple_error(WRONG_TYPE_STRING))
         return
@@ -167,14 +173,14 @@ async def _handle_getbit(
         bit_position: int = offset_int % 8
 
         # Check if the byte index is within the bounds of the string
-        current_length: int = len(storage.storage_dict[key])
+        current_length: int = len(storage.storage_dict[key].value)
         if byte_index >= current_length:
             logging.info(f"Offset {offset_int} exceeds length of key {key}. Returning 0 for GETBIT.")
             await write_and_drain(writer, format_integer_success("0"))
             return
 
         # Get the current byte and extract the specific bit
-        current_byte: int = ord(storage.storage_dict[key][byte_index])
+        current_byte: int = ord(storage.storage_dict[key].value[byte_index])
         bit_value: int = (current_byte >> (7 - bit_position)) & 1
 
         logging.info(f"GETBIT command executed: key={key}, offset={offset_int}, value={bit_value}")

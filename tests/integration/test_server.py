@@ -198,6 +198,31 @@ class StringCommandsTests(TestServer):
         response = await self.reader.read(100)
         self.assertEqual(response, WRONG_TYPE_STRING_BYTE_CODE)
 
+    async def test_strlen(self):
+        await write_and_drain(
+            self.writer, b"*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b"*2\r\n$6\r\nSTRLEN\r\n$3\r\nkey\r\n")
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":5\r\n")
+
+    async def test_strlen_non_existing_key(self):
+        await write_and_drain(
+            self.writer, b"*2\r\n$6\r\nSTRLEN\r\n$3\r\nnon_existing_key\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":0\r\n")
+
+    async def test_strlen_non_string_key(self):
+        await write_and_drain(
+            self.writer, b"*4\r\n$5\r\nRPUSH\r\n$6\r\nmylist\r\n$1\r\na\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(self.writer, b"*2\r\n$6\r\nSTRLEN\r\n$6\r\nmylist\r\n")
+        response = await self.reader.read(100)
+        self.assertEqual(response, WRONG_TYPE_STRING_BYTE_CODE)
+
 class BitmapCommandsTests(TestServer):
     """
     Test SETBIT, GETBIT commands
@@ -217,12 +242,12 @@ class BitmapCommandsTests(TestServer):
         self.assertEqual(response, b":1\r\n")  # Previous bit was 1
 
     async def test_setbit_wrong_type(self):
-        await write_and_drain(
-            self.writer, b"*4\r\n$5\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n"
+        await write_and_drain( # Create a list
+            self.writer, b"*4\r\n$5\r\nRPUSH\r\n$6\r\nmylist\r\n$1\r\na\r\n"
         )
         _ = await self.reader.read(100)
         await write_and_drain(
-            self.writer, b"*4\r\n$6\r\nSETBIT\r\n$3\r\nkey\r\n$1\r\n0\r\n$1\r\n1\r\n"
+            self.writer, b"*4\r\n$6\r\nSETBIT\r\n$3\r\nmylist\r\n$1\r\n0\r\n$1\r\n1\r\n"
         )
         response = await self.reader.read(100)
         self.assertEqual(response, WRONG_TYPE_STRING_BYTE_CODE)
@@ -298,12 +323,12 @@ class BitmapCommandsTests(TestServer):
         self.assertEqual(response, BIT_OFFSET_ERROR_BYTE_CODE)
 
     async def test_getbit_wrong_type(self):
-        await write_and_drain(
-            self.writer, b"*4\r\n$5\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n"
+        await write_and_drain( # Create a list
+            self.writer, b"*4\r\n$5\r\nRPUSH\r\n$6\r\nmylist\r\n$1\r\na\r\n"
         )
         _ = await self.reader.read(100)
         await write_and_drain(
-            self.writer, b"*3\r\n$6\r\nGETBIT\r\n$3\r\nkey\r\n$1\r\n0\r\n"
+            self.writer, b"*3\r\n$6\r\nGETBIT\r\n$3\r\nmylist\r\n$1\r\n0\r\n"
         )
         response = await self.reader.read(100)
         self.assertEqual(response, WRONG_TYPE_STRING_BYTE_CODE)
@@ -314,6 +339,43 @@ class BitmapCommandsTests(TestServer):
         )
         response = await self.reader.read(100)
         self.assertEqual(response, b":0\r\n")  # Out of range offset returns 0
+
+    async def test_get_after_setbit(self):
+        await write_and_drain(
+            self.writer, b"*4\r\n$6\r\nSETBIT\r\n$3\r\nkey\r\n$1\r\n1\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*3\r\n$6\r\nGET\r\n$3\r\nkey\r\n$1\r\n1\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b"$1\r\n@\r\n")
+
+    async def test_bitmap_growth(self):
+        await write_and_drain(
+            self.writer, b"*4\r\n$6\r\nSETBIT\r\n$3\r\nkey\r\n$2\r\n1\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+        
+        # Check string length after setting bit at offset 1
+        await write_and_drain(
+            self.writer, b"*2\r\n$4\r\nSTRLEN\r\n$3\r\nkey\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":1\r\n")  # Length should be 1 byte
+
+        
+        await write_and_drain(
+            self.writer, b"*4\r\n$6\r\nSETBIT\r\n$3\r\nkey\r\n$2\r\n10\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+
+        # Check string length after setting bit at offset 10
+        await write_and_drain(
+            self.writer, b"*2\r\n$4\r\nSTRLEN\r\n$3\r\nkey\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":2\r\n")
 
 
 
