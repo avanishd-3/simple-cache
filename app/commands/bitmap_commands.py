@@ -26,6 +26,7 @@ async def handle_bitmap_commands(
     """
     commands_dict: dict = {
         "SETBIT": _handle_setbit,
+        "GETBIT": _handle_getbit,
     }
     handler = commands_dict.get(command.upper())
     if handler:
@@ -123,4 +124,62 @@ async def _handle_setbit(
         
         logging.info(f"Invalid value: {value}")
         await write_and_drain(writer, format_simple_error("ERR bit is not an integer or out of range"))
+        return
+    
+async def _handle_getbit(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
+    """
+    Handles the GETBIT command.
+
+    Args:
+        writer (asyncio.StreamWriter): The StreamWriter to write the response to.
+        args (list): The arguments provided.
+        storage (DataStorage): The DataStorage instance to interact with.
+    """
+    key: str = args[0] if len(args) > 0 else ""
+    offset: str = args[1] if len(args) > 1 else ""
+
+    # If the key exists and is not a string, return an error
+    if key in storage.storage_dict and not isinstance(storage.storage_dict[key], str):
+        logging.info(f"Key {key} exists and is not a string")
+        await write_and_drain(writer, format_simple_error(WRONG_TYPE_STRING))
+        return
+
+    # If the key does not exist, return 0
+    if key not in storage.storage_dict:
+        logging.info(f"Key {key} does not exist. Returning 0 for GETBIT.")
+        await write_and_drain(writer, format_integer_success("0"))
+        return
+
+    # Convert offset to integer
+    try:
+        offset_int: int = int(offset)
+
+        # Validate the offset for GETBIT command
+        if offset_int < 0:
+            logging.info(f"Invalid offset for GETBIT: {offset_int}")
+            await write_and_drain(writer, format_simple_error("ERR bit offset is not an integer or out of range"))
+            return
+        
+        # Calculate the byte index and bit position
+        byte_index: int = offset_int // 8
+        bit_position: int = offset_int % 8
+
+        # Check if the byte index is within the bounds of the string
+        current_length: int = len(storage.storage_dict[key])
+        if byte_index >= current_length:
+            logging.info(f"Offset {offset_int} exceeds length of key {key}. Returning 0 for GETBIT.")
+            await write_and_drain(writer, format_integer_success("0"))
+            return
+
+        # Get the current byte and extract the specific bit
+        current_byte: int = ord(storage.storage_dict[key][byte_index])
+        bit_value: int = (current_byte >> (7 - bit_position)) & 1
+
+        logging.info(f"GETBIT command executed: key={key}, offset={offset_int}, value={bit_value}")
+        await write_and_drain(writer, format_integer_success(str(bit_value)))
+    except ValueError:
+        logging.info(f"Invalid offset: {offset}")
+        await write_and_drain(writer, format_simple_error("ERR bit offset is not an integer or out of range"))
         return

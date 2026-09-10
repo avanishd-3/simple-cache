@@ -200,7 +200,7 @@ class StringCommandsTests(TestServer):
 
 class BitmapCommandsTests(TestServer):
     """
-    Test SETBIT command
+    Test SETBIT, GETBIT commands
     """
 
     async def test_setbit_basic(self):
@@ -254,6 +254,68 @@ class BitmapCommandsTests(TestServer):
         )
         response = await self.reader.read(100)
         self.assertEqual(response, BIT_VALUE_ERROR_BYTE_CODE)
+
+    async def test_getbit_basic(self):
+        await write_and_drain(
+            self.writer, b"*4\r\n$6\r\nSETBIT\r\n$3\r\nkey\r\n$1\r\n0\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*3\r\n$6\r\nGETBIT\r\n$3\r\nkey\r\n$1\r\n0\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":1\r\n")  # Bit at offset 0 is 1
+
+    async def test_getbit_non_existing_key(self):
+        await write_and_drain(
+            self.writer, b"*3\r\n$6\r\nGETBIT\r\n$3\r\nkey\r\n$1\r\n0\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":0\r\n")  # Non-existing key returns 0
+
+    async def test_getbit_non_integer_offset(self):
+        await write_and_drain( # Set key first
+            self.writer, b"*4\r\n$6\r\nSETBIT\r\n$3\r\nkey\r\n$1\r\n0\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+
+        await write_and_drain(
+            self.writer, b"*3\r\n$6\r\nGETBIT\r\n$3\r\nkey\r\n$3\r\nabc\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, BIT_OFFSET_ERROR_BYTE_CODE)
+
+    async def test_getbit_negative_offset(self):
+        await write_and_drain( # Set key first
+            self.writer, b"*4\r\n$6\r\nSETBIT\r\n$3\r\nkey\r\n$1\r\n0\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+
+        await write_and_drain(
+            self.writer, b"*3\r\n$6\r\nGETBIT\r\n$3\r\nkey\r\n$2\r\n-1\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, BIT_OFFSET_ERROR_BYTE_CODE)
+
+    async def test_getbit_wrong_type(self):
+        await write_and_drain(
+            self.writer, b"*4\r\n$5\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*3\r\n$6\r\nGETBIT\r\n$3\r\nkey\r\n$1\r\n0\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, WRONG_TYPE_STRING_BYTE_CODE)
+
+    async def test_getbit_offset_out_of_range(self):
+        await write_and_drain(
+            self.writer, b"*3\r\n$6\r\nGETBIT\r\n$3\r\nkey\r\n$10\r\n1000000000\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":0\r\n")  # Out of range offset returns 0
+
+
 
 class BasicCommandsTests(TestServer):
     """
