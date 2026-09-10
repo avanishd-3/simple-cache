@@ -88,7 +88,8 @@ async def _handle_setbit(
         current_length: int = len(storage.storage_dict[key])
         if byte_index >= current_length:
             # Extend the string with null bytes if necessary
-            storage.storage_dict[key] += "\x00" * (byte_index - current_length + 1)
+            async with storage.lock:
+                storage.storage_dict[key] += "\x00" * (byte_index - current_length + 1)
             logging.info(f"Extended key {key} to accommodate offset {offset_int}")
 
         # Get the current byte and modify the specific bit
@@ -100,11 +101,12 @@ async def _handle_setbit(
             logging.info(f"Clearing bit {bit_position} in key {key}")
         
         # Update the string with the new byte
-        storage.storage_dict[key] = (
-            storage.storage_dict[key][:byte_index]
-            + chr(new_byte)
-            + storage.storage_dict[key][byte_index + 1:]
-        )
+        async with storage.lock:
+            storage.storage_dict[key] = (
+                storage.storage_dict[key][:byte_index]
+                + chr(new_byte)
+                + storage.storage_dict[key][byte_index + 1:]
+            )
 
         logging.info(f"SETBIT command executed: key={key}, offset={offset_int}, value={value_int}")
 
