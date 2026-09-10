@@ -3,6 +3,7 @@ from typing import Literal
 # These types improve type checking by LSPs
 BASIC_COMMANDS: set[Literal["PING", "ECHO", "TYPE", "EXISTS", "DEL"]] = {"PING", "ECHO", "TYPE", "EXISTS", "DEL"}
 STRING_COMMANDS: set[Literal["SET", "GET"]] = {"SET", "GET"}
+BITMAP_COMMANDS: set[Literal["SETBIT"]] = {"SETBIT"}
 LIST_COMMANDS: set[Literal["RPUSH", "LPUSH", "LLEN", "LRANGE", "LPOP", "BLPOP"]] = {"RPUSH", "LPUSH", "LLEN", "LRANGE", "LPOP", "BLPOP"}
 STREAM_COMMANDS: set[Literal["XADD", "XRANGE"]] = {"XADD", "XRANGE"}
 SET_COMMANDS: set[Literal
