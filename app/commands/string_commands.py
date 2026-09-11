@@ -5,6 +5,7 @@ import time
 
 # Internal imports
 from app.format_response import (
+    format_integer_success,
     format_simple_string,
     format_bulk_string_success,
     format_null_bulk_string,
@@ -29,6 +30,7 @@ async def handle_string_commands(
     commands_dict: dict = {
         "SET": _handle_set,
         "GET": _handle_get,
+        "STRLEN": _handle_strlen,
     }
     handler = commands_dict.get(command.upper())
     if handler:
@@ -144,3 +146,34 @@ async def _handle_get(
         # Should return null bulk string -> $-1\r\n
         await write_and_drain(writer, format_null_bulk_string())
         logging.info(f"Key {key} not found")
+
+async def _handle_strlen(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
+    """
+    Handles the STRLEN command.
+
+    Args:
+        writer (asyncio.StreamWriter): The StreamWriter to write the response to.
+        args (list): The arguments provided.
+        storage (DataStorage): The DataStorage instance to interact with.
+    """
+    key: str = args[0] if len(args) > 0 else ""
+    value = await storage.get(key)
+
+    if value is not None:
+        if not isinstance(value, str):
+            await write_and_drain(
+                writer,
+                format_simple_error(WRONG_TYPE_STRING),
+            )
+            logging.info(f"STRLEN: Wrong type for key {key}")
+            return
+        else:
+            length = len(value)
+            await write_and_drain(writer, format_integer_success(str(length)))
+            logging.info(f"Sent STRLEN response: {key} length = {length}")
+    else:
+        # If the key does not exist, return 0
+        await write_and_drain(writer, format_integer_success("0"))
+        logging.info(f"Key {key} not found for STRLEN, returning 0")

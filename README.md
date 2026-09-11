@@ -33,6 +33,7 @@ The supported commands and their differences compared to the Redis versions are 
    | ------- | --------------------------------------------------------------------------------------------------- |
    | SET     | These optional arguments are not supported:<br>NX<br>XX<br>GET |
    | GET     | None                                                                                                |
+   | STRLEN     | None                                                                                             |
    
 </details>
 
@@ -78,6 +79,18 @@ The supported commands and their differences compared to the Redis versions are 
    | SMEMBERS  | None                            |
    | SMOVE  | None                            |
    | SREM  | None                            |
+</details>
+
+<details>
+
+   <summary>Bitmap commands</summary>
+
+   | Command | Deviation from Redis            |
+   | ------- | ------------------------------- |
+   | SETBIT    | None |
+   | GETBIT  | None                            |
+   | BITCOUNT  | None                            |
+   | BITOP  | None                            |
 </details>
 
 <details>

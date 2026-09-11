@@ -15,6 +15,7 @@ from app.utils import (
     conditional_decorator,
     BASIC_COMMANDS,
     STRING_COMMANDS,
+    BITMAP_COMMANDS,
     LIST_COMMANDS,
     STREAM_COMMANDS,
     SET_COMMANDS,
@@ -25,6 +26,7 @@ from app.utils import (
 from app.commands import (
     handle_basic_commands,
     handle_string_commands,
+    handle_bitmap_commands,
     handle_list_commands,
     handle_stream_commands,
     handle_set_commands,
@@ -110,6 +112,10 @@ async def handle_server(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
             case cmd if cmd in STRING_COMMANDS:
                 logging.info(f"Handling string command: {cmd}")
                 await handle_string_commands(writer, cmd, args, storage_data)
+
+            case cmd if cmd in BITMAP_COMMANDS:
+                logging.info(f"Handling bitmap command: {cmd}")
+                await handle_bitmap_commands(writer, cmd, args, storage_data)
 
             case cmd if cmd in LIST_COMMANDS:
                 logging.info(f"Handling list command: {cmd}")
