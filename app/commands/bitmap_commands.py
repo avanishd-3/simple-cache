@@ -30,6 +30,7 @@ async def handle_bitmap_commands(
         "SETBIT": _handle_setbit,
         "GETBIT": _handle_getbit,
         "BITCOUNT": _handle_bitcount,
+        "BITOP": _handle_bitop,
     }
     handler = commands_dict.get(command.upper())
     if handler:
@@ -262,3 +263,116 @@ async def _handle_bitcount(
 
     logging.info(f"BITCOUNT command executed: key={key}, count={bit_count}")
     await write_and_drain(writer, format_integer_success(str(bit_count)))
+
+async def _handle_bitop(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
+    """
+    Handles the BITOP command.
+
+    Options:
+    AND, OR, XOR, NOT, DIFF, DIFF1, ANDOR, ONE
+
+    Args:
+        writer (asyncio.StreamWriter): The StreamWriter to write the response to.
+        args (list): The arguments provided.
+        storage (DataStorage): The DataStorage instance to interact with.
+    """
+    operation: str = args[0] if len(args) > 0 else ""
+    dest_key: str = args[1] if len(args) > 1 else ""
+    source_keys: list[str] = args[2:] if len(args) > 2 else []
+
+    # If the destination key exists and is not a string, return an error
+    if dest_key in storage.storage_dict and not isinstance(storage.storage_dict[dest_key].value, str):
+        logging.info(f"Destination key {dest_key} exists and is not a string")
+        await write_and_drain(writer, format_simple_error(WRONG_TYPE_STRING))
+        return
+
+    # If any of the source keys exist and are not strings, return an error
+    for key in source_keys:
+        if key in storage.storage_dict and not isinstance(storage.storage_dict[key].value, str):
+            logging.info(f"Source key {key} exists and is not a string")
+            await write_and_drain(writer, format_simple_error(WRONG_TYPE_STRING))
+            return
+        
+    # Convert source keys to their corresponding string values
+    # # Non-existent keys are considered a stream of zero-bytes
+    source_values: list[str] = [
+        storage.storage_dict[key].value if key in storage.storage_dict else ""
+        for key in source_keys
+    ]
+    bin_values = [bytes(value, 'latin-1') for value in source_values]
+
+    # Zero-pad the shorter values to match the length of the longest value
+    max_length: int = max(len(value) for value in bin_values)
+    bin_values = [value.ljust(max_length, b'\x00') for value in bin_values]
+
+
+    # Perform the bit operation based on the specified operation
+    result: str = ""
+    match operation.upper():
+        case "AND":
+            logging.info(f"Performing BITOP AND on keys: {source_keys}")
+            for val in bin_values:
+                if not result:
+                    result = val
+                else:
+                    result = bytes(a & b for a, b in zip(result, val))
+        case "OR":
+            logging.info(f"Performing BITOP OR on keys: {source_keys}")
+            for val in bin_values:
+                if not result:
+                    result = val
+                else:
+                    result = bytes(a | b for a, b in zip(result, val))
+        case "XOR":
+            logging.info(f"Performing BITOP XOR on keys: {source_keys}")
+            for val in bin_values:
+                if not result:
+                    result = val
+                else:
+                    result = bytes(a ^ b for a, b in zip(result, val))
+        case "NOT":
+            if len(source_keys) != 1:
+                logging.info(f"BITOP NOT requires exactly one source key, but got: {source_keys}")
+                await write_and_drain(writer, format_simple_error("ERR BITOP NOT must be called with a single source key."))
+                return
+            logging.info(f"Performing BITOP NOT on key: {source_keys[0]}")
+            result = bytes(~b & 0xFF for b in bin_values[0])
+        case "DIFF":
+            # Bit set if set in X but not in others, where X is the first source key
+            logging.info(f"Performing BITOP DIFF on keys: {source_keys}")
+            first_value = bin_values[0]
+            other_values = bin_values[1:]
+            result = bytes(a & ~b for a, b in zip(first_value, other_values[0])) if other_values else first_value
+        case "DIFF1":
+            # Bit set if not set in X but set in at least one of the others, where X is the first source key
+            logging.info(f"Performing BITOP DIFF1 on keys: {source_keys}")
+            first_value = bin_values[0]
+            other_values = bin_values[1:]
+            result = bytes(~a & b for a, b in zip(first_value, other_values[0])) if other_values else bytes(~b & 0xFF for b in first_value)
+        case "ANDOR":
+            # Bit set if in X and in one or more of Y, where X is the first source key and Y are the other source keys
+            logging.info(f"Performing BITOP ANDOR on keys: {source_keys}")
+            first_value = bin_values[0]
+            other_values = bin_values[1:]
+            result = bytes(a & b for a, b in zip(first_value, other_values[0])) if other_values else first_value
+        case "ONE":
+            # Bit set if in exactly one of the source keys
+            logging.info(f"Performing BITOP ONE on keys: {source_keys}")
+            result = bytes(sum((b >> i) & 1 for b in vals for i in range(8)) == 1 for vals in zip(*bin_values))
+        case _:
+            logging.info(f"Unknown BITOP operation: {operation}")
+            await write_and_drain(writer, format_simple_error("ERR syntax error"))
+            return
+
+    # Store the result in the destination key
+    result = result.ljust(max_length, b'\x00')
+    len_in_bytes = len(result)
+    result = result.decode('latin-1')  # Convert bytes back to string for storage
+    async with storage.lock:
+        storage.storage_dict[dest_key] = ValueWithExpiry(result, None)
+
+
+    logging.info(f"BITOP command executed: operation={operation}, dest_key={dest_key}, source_keys={source_keys}, result_length={len_in_bytes}")
+    await write_and_drain(writer, format_integer_success(str(len_in_bytes))) # Return length of string in bytes

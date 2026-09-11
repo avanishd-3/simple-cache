@@ -454,7 +454,299 @@ class BitmapCommandsTests(TestServer):
         response = await self.reader.read(100)
         self.assertEqual(response, b"-ERR value is not an integer or out of range\r\n")
 
+    async def test_bitop_and(self):
 
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSETBIT\r\n$4\r\nkey1\r\n$1\r\n0\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSETBIT\r\n$4\r\nkey1\r\n$1\r\n4\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSETBIT\r\n$4\r\nkey2\r\n$1\r\n0\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSETBIT\r\n$4\r\nkey2\r\n$1\r\n6\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+
+        await write_and_drain(
+            self.writer, b"*4\r\n$5\r\nBITOP\r\n$3\r\nAND\r\n$4\r\ndest_key\r\n$4\r\nkey1\r\n$4\r\nkey2\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":1\r\n")  # Length of the result
+
+        await write_and_drain(
+            self.writer, b"*3\r\n$6\r\nGETBIT\r\n$8\r\ndest_key\r\n$1\r\n0\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":1\r\n")
+
+        await write_and_drain(
+            self.writer, b"*3\r\n$6\r\nGETBIT\r\n$8\r\ndest_key\r\n$1\r\n4\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":0\r\n")
+
+    async def test_bitop_and_different_length(self):
+
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSETBIT\r\n$4\r\nkey1\r\n$1\r\n1\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSETBIT\r\n$4\r\nkey1\r\n$1\r\n10\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSETBIT\r\n$4\r\nkey2\r\n$1\r\n1\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+
+        await write_and_drain(
+            self.writer, b"*4\r\n$5\r\nBITOP\r\n$3\r\nAND\r\n$4\r\ndest_key\r\n$4\r\nkey1\r\n$4\r\nkey2\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":2\r\n")  # Length of the result
+
+        await write_and_drain(
+            self.writer, b"*3\r\n$6\r\nGETBIT\r\n$8\r\ndest_key\r\n$1\r\n1\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":1\r\n")
+
+        await write_and_drain(
+            self.writer, b"*3\r\n$6\r\nGETBIT\r\n$8\r\ndest_key\r\n$2\r\n10\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":0\r\n")
+
+    async def test_bitop_or(self):
+
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSETBIT\r\n$4\r\nkey1\r\n$1\r\n0\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSETBIT\r\n$4\r\nkey1\r\n$1\r\n4\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSETBIT\r\n$4\r\nkey2\r\n$1\r\n0\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSETBIT\r\n$4\r\nkey2\r\n$1\r\n6\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+
+        await write_and_drain(
+            self.writer, b"*4\r\n$5\r\nBITOP\r\n$3\r\nOR\r\n$4\r\ndest_key\r\n$4\r\nkey1\r\n$4\r\nkey2\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":1\r\n")  # Length of the result
+
+        await write_and_drain(
+            self.writer, b"*3\r\n$6\r\nGETBIT\r\n$8\r\ndest_key\r\n$1\r\n0\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":1\r\n")
+
+        await write_and_drain(
+            self.writer, b"*3\r\n$6\r\nGETBIT\r\n$8\r\ndest_key\r\n$1\r\n4\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":1\r\n")
+
+    async def test_bitop_xor(self):
+        
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSETBIT\r\n$4\r\nkey1\r\n$1\r\n0\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSETBIT\r\n$4\r\nkey1\r\n$1\r\n4\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSETBIT\r\n$4\r\nkey2\r\n$1\r\n0\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSETBIT\r\n$4\r\nkey2\r\n$1\r\n6\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+
+        await write_and_drain(
+            self.writer, b"*4\r\n$5\r\nBITOP\r\n$3\r\nXOR\r\n$4\r\ndest_key\r\n$4\r\nkey1\r\n$4\r\nkey2\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":1\r\n")  # Length of the result
+
+        await write_and_drain(
+            self.writer, b"*3\r\n$6\r\nGETBIT\r\n$8\r\ndest_key\r\n$1\r\n0\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":0\r\n")
+
+        await write_and_drain(
+            self.writer, b"*3\r\n$6\r\nGETBIT\r\n$8\r\ndest_key\r\n$1\r\n4\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":1\r\n")
+
+    async def test_bitop_not(self):
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSETBIT\r\n$4\r\nkey1\r\n$1\r\n0\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSETBIT\r\n$4\r\nkey1\r\n$1\r\n4\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+
+        await write_and_drain(
+            self.writer, b"*4\r\n$5\r\nBITOP\r\n$3\r\nNOT\r\n$4\r\ndest_key\r\n$4\r\nkey1\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":1\r\n")  # Length of the result
+
+        await write_and_drain(
+            self.writer, b"*3\r\n$6\r\nGETBIT\r\n$8\r\ndest_key\r\n$1\r\n0\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":0\r\n")
+
+        await write_and_drain(
+            self.writer, b"*3\r\n$6\r\nGETBIT\r\n$8\r\ndest_key\r\n$1\r\n4\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":0\r\n")
+
+    async def test_bitop_not_with_multiple_source_keys(self):
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSET\r\n$3\r\nkey1\r\n$6\r\nfoobar\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSET\r\n$3\r\nkey2\r\n$6\r\nbarbaz\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*4\r\n$5\r\nBITOP\r\n$3\r\nNOT\r\n$4\r\ndest_key\r\n$4\r\nkey1\r\n$4\r\nkey2\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b"-ERR BITOP NOT must be called with a single source key.\r\n")
+
+    async def test_bitop_diff(self):
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSET\r\n$3\r\nkey1\r\n$6\r\nfoobar\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSET\r\n$3\r\nkey2\r\n$6\r\nbarbaz\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*4\r\n$5\r\nBITOP\r\n$4\r\nDIFF\r\n$4\r\ndest_key\r\n$4\r\nkey1\r\n$4\r\nkey2\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":6\r\n")  # Length of the result
+
+        # Check the result of the DIFF operation
+        await write_and_drain(
+            self.writer, b"*2\r\n$3\r\nGET\r\n$8\r\ndest_key\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'$6\r\n\x04\x0e\r\x00\x00\x00\r\n')
+
+    async def test_bitop_diff_1(self):
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSET\r\n$3\r\nkey1\r\n$6\r\nfoobar\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSET\r\n$3\r\nkey2\r\n$6\r\nbarbaz\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*4\r\n$5\r\nBITOP\r\n$5\r\nDIFF1\r\n$4\r\ndest_key\r\n$4\r\nkey1\r\n$4\r\nkey2\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":6\r\n")  # Length of the result
+
+        # Check the result of the DIFF1 operation
+        await write_and_drain(
+            self.writer, b"*2\r\n$3\r\nGET\r\n$8\r\ndest_key\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'$6\r\n\x00\x00\x10\x00\x00\x08\r\n')
+
+    async def test_bitop_andor(self):
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSET\r\n$3\r\nkey1\r\n$6\r\nfoobar\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSET\r\n$3\r\nkey2\r\n$6\r\nbarbaz\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*4\r\n$5\r\nBITOP\r\n$5\r\nANDOR\r\n$4\r\ndest_key\r\n$4\r\nkey1\r\n$4\r\nkey2\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":6\r\n")  # Length of the result
+
+        # Check the result of the ANDOR operation
+        await write_and_drain(
+            self.writer, b"*2\r\n$3\r\nGET\r\n$8\r\ndest_key\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'$6\r\nbabbar\r\n')
+
+    async def test_bitop_one(self):
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSET\r\n$3\r\nkey1\r\n$6\r\nfoobar\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*4\r\n$5\r\nBITOP\r\n$3\r\nONE\r\n$4\r\ndest_key\r\n$4\r\nkey1\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":6\r\n")  # Length of the result
+
+        # Check the result of the ONE operation
+        await write_and_drain(
+            self.writer, b"*2\r\n$3\r\nGET\r\n$8\r\ndest_key\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b'$6\r\n\x00\x00\x00\x00\x00\x00\r\n')
+
+    async def test_bitop_unknown_operation(self):
+        await write_and_drain(
+            self.writer, b"*4\r\n$3\r\nSET\r\n$3\r\nkey1\r\n$6\r\nfoobar\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*4\r\n$5\r\nBITOP\r\n$7\r\nUNKNOWN\r\n$4\r\ndest_key\r\n$4\r\nkey1\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b"-ERR syntax error\r\n")
 
 
 class BasicCommandsTests(TestServer):
