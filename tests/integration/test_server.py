@@ -225,7 +225,7 @@ class StringCommandsTests(TestServer):
 
 class BitmapCommandsTests(TestServer):
     """
-    Test SETBIT, GETBIT commands
+    Test SETBIT, GETBIT, BITCOUNT commands
     """
 
     async def test_setbit_basic(self):
@@ -376,6 +376,84 @@ class BitmapCommandsTests(TestServer):
         )
         response = await self.reader.read(100)
         self.assertEqual(response, b":2\r\n")
+
+    async def test_bitcount_basic(self):
+        await write_and_drain(
+            self.writer, b"*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$6\r\nfoobar\r\n"
+        )
+        _ = await self.reader.read(100)
+        
+        await write_and_drain(
+            self.writer, b"*3\r\n$8\r\nBITCOUNT\r\n$3\r\nkey\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":26\r\n")
+
+    async def test_bitcount_with_start_and_end(self):
+        await write_and_drain(
+            self.writer, b"*4\r\n$6\r\nSETBIT\r\n$3\r\nkey\r\n$1\r\n0\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*4\r\n$6\r\nSETBIT\r\n$3\r\nkey\r\n$1\r\n1\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*4\r\n$6\r\nSETBIT\r\n$3\r\nkey\r\n$2\r\n10\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*5\r\n$8\r\nBITCOUNT\r\n$3\r\nkey\r\n$2\r\n0\r\n$2\r\n10\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":3\r\n")
+
+    async def test_bitcount_with_negative_indices(self):
+        await write_and_drain(
+            self.writer, b"*4\r\n$6\r\nSETBIT\r\n$3\r\nkey\r\n$1\r\n0\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*4\r\n$6\r\nSETBIT\r\n$3\r\nkey\r\n$1\r\n1\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*4\r\n$6\r\nSETBIT\r\n$3\r\nkey\r\n$2\r\n10\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*5\r\n$8\r\nBITCOUNT\r\n$3\r\nkey\r\n$2\r\n-11\r\n$2\r\n-1\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":3\r\n")
+
+    async def test_bitcount_with_bit_flag(self):
+        await write_and_drain(
+            self.writer, b"*4\r\n$6\r\nSETBIT\r\n$3\r\nkey\r\n$1\r\n0\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*4\r\n$6\r\nSETBIT\r\n$3\r\nkey\r\n$1\r\n1\r\n$1\r\n1\r\n"
+        )
+        _ = await self.reader.read(100)
+        await write_and_drain(
+            self.writer, b"*5\r\n$8\r\nBITCOUNT\r\n$3\r\nkey\r\n$2\r\n0\r\n$2\r\n10\r\n$1\r\n1\r\n$3\r\nBIT\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b":2\r\n")
+
+    async def test_bitcount_non_int_value(self):
+        await write_and_drain(
+            self.writer, b"*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$6\r\nfoobar\r\n"
+        )
+        _ = await self.reader.read(100)
+        
+        await write_and_drain(
+            self.writer, b"*5\r\n$8\r\nBITCOUNT\r\n$3\r\nkey\r\n$2\r\n0\r\n$2\r\nhe\r\n$1\r\n1\r\n$3\r\nBIT\r\n"
+        )
+        response = await self.reader.read(100)
+        self.assertEqual(response, b"-ERR value is not an integer or out of range\r\n")
+
 
 
 

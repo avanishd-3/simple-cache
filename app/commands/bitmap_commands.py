@@ -29,6 +29,7 @@ async def handle_bitmap_commands(
     commands_dict: dict = {
         "SETBIT": _handle_setbit,
         "GETBIT": _handle_getbit,
+        "BITCOUNT": _handle_bitcount,
     }
     handler = commands_dict.get(command.upper())
     if handler:
@@ -189,3 +190,75 @@ async def _handle_getbit(
         logging.info(f"Invalid offset: {offset}")
         await write_and_drain(writer, format_simple_error("ERR bit offset is not an integer or out of range"))
         return
+    
+async def _handle_bitcount(
+    writer: asyncio.StreamWriter, args: list, storage: DataStorage
+) -> None:
+    """
+    Handles the BITCOUNT command.
+
+    Start and end indices are inclusive.
+
+    Negative indices are supported and count from the end of the list. Ex: -1 is last element, -2 is second-last element, and
+    so on.
+
+    If negative index is >= length of list, it is treated as 0.
+
+    Args:
+        writer (asyncio.StreamWriter): The StreamWriter to write the response to.
+        args (list): The arguments provided.
+        storage (DataStorage): The DataStorage instance to interact with.
+    """
+    key: str = args[0] if len(args) > 0 else ""
+    start: str = args[1] if len(args) > 1 else ""
+    end: str = args[2] if len(args) > 2 else ""
+    bit = args[3] if len(args) > 3 else None
+
+    # If the key exists and is not a string, return an error
+    if key in storage.storage_dict and not isinstance(storage.storage_dict[key].value, str):
+        logging.info(f"Key {key} exists and is not a string")
+        await write_and_drain(writer, format_simple_error(WRONG_TYPE_STRING))
+        return
+
+    # If the key does not exist, return 0
+    if key not in storage.storage_dict:
+        logging.info(f"Key {key} does not exist. Returning 0 for BITCOUNT.")
+        await write_and_drain(writer, format_integer_success("0"))
+        return
+
+    # Adjust negative indices
+    if str(bit).upper() == "BIT":
+        # start and end are bit offsets, so we need to convert them to byte offsets
+        start = start // 8
+        end = end // 8
+
+    if start == "" and end == "":
+        start = 0
+        end = len(storage.storage_dict[key].value) - 1
+    else:
+        try:
+            start = int(start)
+            end = int(end)
+        except ValueError:
+            logging.info(f"Invalid start or end: {start}, {end}")
+            await write_and_drain(writer, format_simple_error("ERR value is not an integer or out of range"))
+            return
+
+    if start < 0:
+        start = max(0, len(storage.storage_dict[key].value) + start)
+    if end == 0:
+        end = len(storage.storage_dict[key].value) - 1
+    if end < 0:
+        end = max(0, len(storage.storage_dict[key].value) + end)
+
+    if end < start:
+        logging.info(f"End index {end} is less than start index {start}. Returning 0 for BITCOUNT.")
+        await write_and_drain(writer, format_integer_success("0"))
+        return
+    
+    # Binary 
+
+    bit_count: int = sum(bin(ord(byte)).count('1') for byte in storage.storage_dict[key].value)
+
+    logging.info(f"BITCOUNT command executed: key={key}, count={bit_count}")
+    await write_and_drain(writer, format_integer_success(str(bit_count)))
