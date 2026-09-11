@@ -1,6 +1,6 @@
 # simple-cache
 
-Non-persistent, minimal key-value store inspired by Redis. Uses Python asyncio event loop to manage clients.
+Non-persistent, minimal single-node key-value store inspired by Redis. Uses Python asyncio event loop to manage clients.
 
 The only dependency is snakeviz, which is for visualizing profiling data. The server has no dependencies and can be run without uv.
 See: server shell script.
